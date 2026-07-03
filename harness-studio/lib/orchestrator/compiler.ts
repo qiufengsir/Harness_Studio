@@ -144,7 +144,7 @@ When working on a task, identify which agent role matches and follow its special
 
   // Per-agent rule with glob matchers
   for (const n of graph.nodes) {
-    const globs = roleGlobs(n.role);
+    const globs = roleGlobs(n.role, n.agent);
     files.push({
       path: `.cursor/rules/agent-${n.agent}.mdc`,
       content: `---
@@ -175,7 +175,7 @@ function compileCopilot(name: string, pattern: PatternId, graph: LoopGraph): Com
   for (const n of graph.nodes) {
     files.push({
       path: `.github/instructions/${n.agent}.instructions.md`,
-      content: `---\napplyTo: ${JSON.stringify(roleGlobs(n.role))}\n---\n\n# ${n.label}\n\n${n.systemPrompt ?? `Role: ${n.role}. ${n.description}`}\n`,
+      content: `---\napplyTo: ${JSON.stringify(roleGlobs(n.role, n.agent))}\n---\n\n# ${n.label}\n\n${n.systemPrompt ?? `Role: ${n.role}. ${n.description}`}\n`,
     });
   }
   return files;
@@ -241,7 +241,7 @@ function compileWindsurf(name: string, pattern: PatternId, graph: LoopGraph): Co
   for (const n of graph.nodes) {
     files.push({
       path: `.windsurf/rules/agent-${n.agent}.md`,
-      content: `---\ntrigger: ${n.role === 'leader' || n.role === 'router' ? 'always_on' : 'glob'}\nglobs: ${JSON.stringify(roleGlobs(n.role))}\n---\n\n# ${n.label}\n\n${n.systemPrompt ?? `Role: ${n.role}. ${n.description}`}\n`,
+      content: `---\ntrigger: ${n.role === 'leader' || n.role === 'router' ? 'always_on' : 'glob'}\nglobs: ${JSON.stringify(roleGlobs(n.role, n.agent))}\n---\n\n# ${n.label}\n\n${n.systemPrompt ?? `Role: ${n.role}. ${n.description}`}\n`,
     });
   }
   files.push({
@@ -266,11 +266,56 @@ function compileAider(name: string, pattern: PatternId, graph: LoopGraph): Compi
 }
 
 // ---------- Helpers ----------
-function roleGlobs(role: string): string[] {
+
+/**
+ * Smart glob matcher — uses BOTH role and agent name to pick file globs.
+ * P3 upgrade: instead of all workers getting a catch-all glob,
+ * frontend workers get src globs, backend workers get server globs,
+ * etc. Falls back to role-based defaults.
+ */
+function roleGlobs(role: string, agent?: string): string[] {
+  const a = (agent ?? '').toLowerCase();
+
+  // 1. Agent-name-based specific matches (highest priority)
+  if (/frontend|frontend-architect|ui-|css-|react-|vue-|svelte/.test(a)) {
+    return ['src/**/*.{tsx,jsx,ts,js,css,scss,vue,svelte}', 'app/**/*.{tsx,ts}', 'components/**/*.{tsx,ts}'];
+  }
+  if (/backend-?api|api-?engineer|server-/.test(a)) {
+    return ['server/**/*.{go,py,ts,js,rs,java}', 'api/**/*.{ts,js,py,go}', 'src/server/**/*'];
+  }
+  if (/\bdb-|database|sql-/.test(a)) {
+    return ['**/migrations/**', '**/*.sql', '**/schema/**', '**/prisma/**', '**/drizzle/**'];
+  }
+  if (/devops|ci-|deploy-|infra-/.test(a)) {
+    return ['**/Dockerfile*', '**/docker-compose*', '.github/workflows/**', '**/k8s/**', '**/.gitlab-ci*', 'Makefile'];
+  }
+  if (/security|audit/.test(a)) {
+    return ['**/auth/**', '**/api/**', '**/*.{ts,tsx,js,jsx,py,go,rs,java}', '**/secrets*', '**/.env*'];
+  }
+  if (/test-|tester|qa-/.test(a)) {
+    return ['**/*.{test,spec}.{ts,tsx,js,jsx,py,go,rs,java}', '**/__tests__/**', '**/e2e/**', '**/tests/**'];
+  }
+  if (/doc-|writer|doc-?writer/.test(a)) {
+    return ['**/*.md', '**/README*', '**/docs/**', '**/CHANGELOG*', '**/*.mdx'];
+  }
+  if (/perf-|performance/.test(a)) {
+    return ['**/*.{ts,tsx,js,jsx,py,go}', '**/bench/**'];
+  }
+  if (/data-|etl-|pipeline-|ml-/.test(a)) {
+    return ['**/pipelines/**', '**/etl/**', '**/dag/**', '**/models/**', '**/*.{ipynb,py}'];
+  }
+  if (/inventory|catalog|checkout|cart/.test(a)) {
+    return ['**/inventory/**', '**/catalog/**', '**/checkout/**', '**/cart/**', '**/order*/**'];
+  }
+  if (/compliance|hipaa|pci|audit-/.test(a)) {
+    return ['**/*.{ts,tsx,js,jsx,py,go,rs,java}', '**/audit*/**', '**/compliance/**'];
+  }
+
+  // 2. Role-based defaults
   const map: Record<string, string[]> = {
-    reviewer: ['**/*.{ts,tsx,js,jsx,py,go}'],
-    security: ['**/*.{ts,tsx,js,jsx,py,go,rs,java}', '**/auth/**', '**/api/**'],
-    tester: ['**/*.{test,spec}.{ts,tsx,js,jsx,py}', '**/__tests__/**'],
+    reviewer: ['**/*.{ts,tsx,js,jsx,py,go,rs,java}'],
+    security: ['**/auth/**', '**/api/**', '**/*.{ts,tsx,js,jsx,py,go,rs,java}'],
+    tester: ['**/*.{test,spec}.{ts,tsx,js,jsx,py,go,rs,java}', '**/__tests__/**', '**/tests/**'],
     'doc-writer': ['**/*.md', '**/README*', '**/docs/**'],
     leader: ['**/*'],
     router: ['**/*'],

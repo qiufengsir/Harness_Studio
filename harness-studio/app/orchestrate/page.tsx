@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Workflow, Plus, ArrowRight, Loader2 } from 'lucide-react';
 import { Card, CardSection, Button, PageHeader, Chip, EmptyState } from '@/components/ui';
-import { PatternPicker } from '@/components/orchestrate/PatternPicker';
+import { PatternPicker, type CreateLoopData } from '@/components/orchestrate/PatternPicker';
 import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface LoopRow {
@@ -34,14 +34,21 @@ export default function OrchestratePage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const createLoop = async (pattern: string, name: string) => {
+  const createLoop = async (data: CreateLoopData) => {
     const res = await fetch('/api/loops', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, pattern, action: 'create' }),
+      body: JSON.stringify({
+        name: data.name,
+        pattern: data.pattern,
+        graph: data.graph,
+        agentPrompts: data.agentPrompts,
+        description: data.description,
+        action: 'create',
+      }),
     });
-    const data = await res.json();
-    router.push(`/orchestrate/${data.id}`);
+    const result = await res.json();
+    router.push(`/orchestrate/${result.id}`);
   };
 
   return (

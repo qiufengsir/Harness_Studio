@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { PatternId, PATTERN_LIST, getPattern } from '@/lib/orchestrator/patterns';
 import { compileLoop, LoopGraph } from '@/lib/orchestrator/compiler';
 import { validateLoop } from '@/lib/orchestrator/validator';
+import { healthCheck } from '@/lib/orchestrator/healthcheck';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,16 +46,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', issues }, { status: 400 });
     }
     const compiled = compileLoop(name, pattern, graph, targets);
-    return NextResponse.json({ compiled, validation: issues });
+    const health = healthCheck(name, pattern, graph, targets);
+    return NextResponse.json({ compiled, validation: issues, health });
   }
 
   // Default: create new loop
-  const { name, description, pattern, graph, targets } = body as {
+  const { name, description, pattern, graph, targets, agentPrompts } = body as {
     name: string;
     description?: string;
     pattern: PatternId;
     graph?: LoopGraph;
     targets?: string[];
+    agentPrompts?: Record<string, string>; // agent name -> system prompt
   };
 
   // If no graph provided, scaffold from pattern template
@@ -67,6 +70,16 @@ export async function POST(req: NextRequest) {
       nodes: tmpl.nodes.map((n) => ({ ...n })),
       edges: tmpl.edges.map((e) => ({ ...e })),
     };
+  }
+
+  // If agentPrompts provided, fill systemPrompt on matching nodes
+  if (agentPrompts && typeof agentPrompts === 'object') {
+    for (const node of finalGraph.nodes) {
+      const prompt = agentPrompts[node.agent];
+      if (prompt && typeof prompt === 'string' && prompt.length > 0 && !prompt.startsWith('{')) {
+        node.systemPrompt = prompt;
+      }
+    }
   }
 
   const id = randomUUID();

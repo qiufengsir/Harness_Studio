@@ -6,7 +6,13 @@
 //   - description of when to use it
 // ============================================================
 
-export type PatternId = 'pipeline' | 'parallel' | 'worker-leader' | 'specialist-router';
+export type PatternId =
+  | 'pipeline'
+  | 'parallel'
+  | 'worker-leader'
+  | 'specialist-router'
+  | 'peer-to-peer'
+  | 'hierarchical';
 
 export interface PatternNode {
   id: string;
@@ -143,11 +149,88 @@ const SPECIALIST_ROUTER: PatternDef = {
   ],
 };
 
+// ---------- Peer-to-Peer ----------
+const PEER_TO_PEER: PatternDef = {
+  id: 'peer-to-peer',
+  name: 'Peer-to-Peer',
+  tagline: 'Equal agents collaborate, no central leader.',
+  description: 'All agents are peers — each can request help from any other. Best for code review, pair programming, and exploratory work where no single agent should own control.',
+  whenToUse: [
+    'Multi-perspective code review (architecture + security + perf peers)',
+    'Pair programming on hard problems',
+    'Exploratory design (peers challenge each other)',
+  ],
+  nodes: [
+    { id: 'p1', role: 'reviewer',   label: 'Architecture Peer',  agent: 'arch-reviewer',   description: 'Design + structure', x: 200, y: 80 },
+    { id: 'p2', role: 'security',   label: 'Security Peer',      agent: 'security-auditor', description: 'Vulns + threats', x: 560, y: 80 },
+    { id: 'p3', role: 'tester',     label: 'Test Peer',          agent: 'test-engineer',   description: 'Coverage + edge cases', x: 200, y: 320 },
+    { id: 'p4', role: 'reviewer',   label: 'Performance Peer',   agent: 'perf-reviewer',   description: 'Latency + memory', x: 560, y: 320 },
+  ],
+  edges: [
+    { id: 'e1', source: 'p1', target: 'p2', label: 'consult' },
+    { id: 'e2', source: 'p2', target: 'p1', label: 'reply' },
+    { id: 'e3', source: 'p1', target: 'p3', label: 'consult' },
+    { id: 'e4', source: 'p3', target: 'p1', label: 'reply' },
+    { id: 'e5', source: 'p2', target: 'p4', label: 'consult' },
+    { id: 'e6', source: 'p4', target: 'p2', label: 'reply' },
+    { id: 'e7', source: 'p3', target: 'p4', label: 'consult' },
+    { id: 'e8', source: 'p4', target: 'p3', label: 'reply' },
+  ],
+};
+
+// ---------- Hierarchical ----------
+const HIERARCHICAL: PatternDef = {
+  id: 'hierarchical',
+  name: 'Hierarchical',
+  tagline: 'Multi-level tree: top leader → mid leads → workers.',
+  description: 'A tree structure where a top-level leader dispatches to mid-level team leads, who each manage their own workers. Best for large enterprise projects with multiple teams.',
+  whenToUse: [
+    'Enterprise project with frontend + backend + infra teams',
+    'Monorepo with multiple packages, each with its own lead',
+    'Migration involving org-wide coordinated changes',
+  ],
+  nodes: [
+    { id: 'root', role: 'leader', label: 'Project Lead',     agent: 'orchestrator',     description: 'Top-level plan + cross-team coordination', x: 440, y: 40 },
+    { id: 'fe-lead', role: 'leader', label: 'Frontend Lead', agent: 'frontend-lead',   description: 'Owns frontend team', x: 160, y: 200 },
+    { id: 'be-lead', role: 'leader', label: 'Backend Lead',  agent: 'backend-lead',    description: 'Owns backend team', x: 440, y: 200 },
+    { id: 'ops-lead', role: 'leader', label: 'DevOps Lead',  agent: 'devops-lead',     description: 'Owns infra team', x: 720, y: 200 },
+    { id: 'fe-w1', role: 'worker', label: 'UI Engineer',     agent: 'frontend-architect', description: 'Components + state', x: 80,  y: 380 },
+    { id: 'fe-w2', role: 'worker', label: 'Styling Engineer', agent: 'css-engineer',    description: 'CSS + design system', x: 240, y: 380 },
+    { id: 'be-w1', role: 'worker', label: 'API Engineer',    agent: 'backend-api',     description: 'Routes + handlers', x: 360, y: 380 },
+    { id: 'be-w2', role: 'worker', label: 'DB Engineer',     agent: 'db-engineer',     description: 'Schema + queries', x: 520, y: 380 },
+    { id: 'ops-w1', role: 'worker', label: 'CI Engineer',    agent: 'ci-engineer',     description: 'Pipelines + tests', x: 640, y: 380 },
+    { id: 'ops-w2', role: 'worker', label: 'Deploy Engineer', agent: 'deploy-engineer', description: 'Releases + rollback', x: 800, y: 380 },
+  ],
+  edges: [
+    { id: 'e1', source: 'root', target: 'fe-lead', label: 'frontend goals' },
+    { id: 'e2', source: 'root', target: 'be-lead', label: 'backend goals' },
+    { id: 'e3', source: 'root', target: 'ops-lead', label: 'infra goals' },
+    { id: 'e4', source: 'fe-lead', target: 'fe-w1', label: 'task' },
+    { id: 'e5', source: 'fe-lead', target: 'fe-w2', label: 'task' },
+    { id: 'e6', source: 'be-lead', target: 'be-w1', label: 'task' },
+    { id: 'e7', source: 'be-lead', target: 'be-w2', label: 'task' },
+    { id: 'e8', source: 'ops-lead', target: 'ops-w1', label: 'task' },
+    { id: 'e9', source: 'ops-lead', target: 'ops-w2', label: 'task' },
+    // Results bubble back up
+    { id: 'e10', source: 'fe-w1', target: 'fe-lead', label: 'result' },
+    { id: 'e11', source: 'fe-w2', target: 'fe-lead', label: 'result' },
+    { id: 'e12', source: 'be-w1', target: 'be-lead', label: 'result' },
+    { id: 'e13', source: 'be-w2', target: 'be-lead', label: 'result' },
+    { id: 'e14', source: 'ops-w1', target: 'ops-lead', label: 'result' },
+    { id: 'e15', source: 'ops-w2', target: 'ops-lead', label: 'result' },
+    { id: 'e16', source: 'fe-lead', target: 'root', label: 'team result' },
+    { id: 'e17', source: 'be-lead', target: 'root', label: 'team result' },
+    { id: 'e18', source: 'ops-lead', target: 'root', label: 'team result' },
+  ],
+};
+
 export const PATTERNS: Record<PatternId, PatternDef> = {
   pipeline: PIPELINE,
   parallel: PARALLEL,
   'worker-leader': WORKER_LEADER,
   'specialist-router': SPECIALIST_ROUTER,
+  'peer-to-peer': PEER_TO_PEER,
+  hierarchical: HIERARCHICAL,
 };
 
 export const PATTERN_LIST = Object.values(PATTERNS);

@@ -40,6 +40,7 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
   const [saving, setSaving] = useState(false);
   const [compiling, setCompiling] = useState(false);
   const [compiled, setCompiled] = useState<CompileTarget[] | null>(null);
+  const [health, setHealth] = useState<any>(null);
   const [validation, setValidation] = useState<{ level: string; message: string }[]>([]);
   const [targets, setTargets] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
@@ -124,6 +125,7 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
       const data = await res.json();
       if (res.ok) {
         setCompiled(data.compiled);
+        setHealth(data.health ?? null);
         setValidation(data.validation ?? []);
         setShowPreview(true);
       } else {
@@ -366,8 +368,52 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
             </div>
 
             <div className="flex-1 flex overflow-hidden">
-              {/* File tree */}
+              {/* File tree + health panel */}
               <div className="w-72 border-r border-line overflow-y-auto p-3">
+                {/* Health check report */}
+                {health && (
+                  <div className="mb-4 p-3 rounded-md border border-line bg-bg2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink3">Health</span>
+                      <span className={`text-sm font-bold ${health.passed ? 'text-good' : 'text-warn'}`}>
+                        {health.scores.overall}
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-[10px]">
+                      {[
+                        ['Complete', health.scores.completeness],
+                        ['Coverage', health.scores.coverage],
+                        ['Coherence', health.scores.coherence],
+                        ['Platform', health.scores.platform],
+                      ].map(([label, val]: any) => (
+                        <div key={label} className="flex items-center gap-1.5">
+                          <span className="text-ink3 w-16 flex-shrink-0">{label}</span>
+                          <div className="h-1 flex-1 bg-bg3 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${val >= 80 ? 'bg-good' : val >= 50 ? 'bg-warn' : 'bg-bad'}`}
+                              style={{ width: `${val}%` }}
+                            />
+                          </div>
+                          <span className="text-ink2 w-6 text-right font-mono">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {health.findings.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-line space-y-1">
+                        {health.findings.slice(0, 4).map((f: any, i: number) => (
+                          <div key={i} className={`text-[9px] leading-tight ${
+                            f.severity === 'critical' ? 'text-bad' : f.severity === 'warning' ? 'text-warn' : 'text-ink3'
+                          }`}>
+                            {f.severity === 'critical' ? '✕' : f.severity === 'warning' ? '⚠' : 'ℹ'} {f.message}
+                          </div>
+                        ))}
+                        {health.findings.length > 4 && (
+                          <div className="text-[9px] text-ink3">+{health.findings.length - 4} more</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {compiled.map((t) => (
                   <div key={t.platform} className="mb-4">
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1.5 px-2">
