@@ -4,7 +4,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
-import { codeAnalysis, recommendations, projects } from '@/lib/db/schema';
+import { codeAnalysis, recommendations, projects, Recommendation } from '@/lib/db/schema';
 import { eq } from '@/lib/db/query-helpers';
 
 export const runtime = 'nodejs';
@@ -31,7 +31,7 @@ export async function GET(
       archPatterns: analysis.archPatterns ? JSON.parse(analysis.archPatterns) : [],
       issues: JSON.parse(analysis.issues),
     },
-    recommendations: recs.map((r) => ({
+    recommendations: recs.map((r: Recommendation) => ({
       ...r,
       platformTargets: r.platformTargets ? JSON.parse(r.platformTargets) : [],
       payload: JSON.parse(r.payload),

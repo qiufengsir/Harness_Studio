@@ -2,7 +2,7 @@
 // Reverse Engineering — Result Page (server component, i18n via cookie)
 // ============================================================
 import { getDB } from '@/lib/db/client';
-import { codeAnalysis, recommendations, projects } from '@/lib/db/schema';
+import { codeAnalysis, recommendations, projects, Recommendation } from '@/lib/db/schema';
 import { eq } from '@/lib/db/query-helpers';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -104,7 +104,7 @@ export default async function ResultPage({ params }: { params: Promise<{ id: str
               </div>
               <p className="text-xs text-ink3 mb-4">{t('rev.result.recs.sub')}</p>
               <div className="space-y-3 -mx-2">
-                {recs.map((rec) => {
+                {recs.map((rec: Recommendation) => {
                   const payload = JSON.parse(rec.payload);
                   const targets = rec.platformTargets ? JSON.parse(rec.platformTargets) : [];
                   return (

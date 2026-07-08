@@ -3,7 +3,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
-import { codeSamples, metricEvents, scoreHistory, projects } from '@/lib/db/schema';
+import { codeSamples, metricEvents, scoreHistory, projects, CodeSample, MetricEvent, ScoreHistory } from '@/lib/db/schema';
 import { scoreCode, scoreCodeBatch } from '@/lib/metrics/scorer';
 import { uuid } from '@/lib/utils/uuid';
 import { eq, desc } from '@/lib/db/query-helpers';
@@ -43,10 +43,9 @@ export async function GET(req: NextRequest) {
   const recentEvents = db.select().from(metricEvents).orderBy(desc(metricEvents.createdAt)).limit(200).all();
 
   return NextResponse.json({
-    samples: samples.map((s) => ({
+    samples: samples.map((s: CodeSample) => ({
       ...s,
-      // Find events for this sample
-      events: recentEvents.filter((e) => e.sampleId === s.id).map((e) => ({
+      events: recentEvents.filter((e: MetricEvent) => e.sampleId === s.id).map((e: MetricEvent) => ({
         rule: e.rule,
         passed: !!e.passed,
         severity: e.severity,
@@ -54,7 +53,7 @@ export async function GET(req: NextRequest) {
         dimension: inferDimension(e.rule),
       })),
     })),
-    history: history.map((h) => ({
+    history: history.map((h: ScoreHistory) => ({
       ...h,
       topContributors: h.topContributors ? JSON.parse(h.topContributors) : [],
     })),

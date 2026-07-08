@@ -3,7 +3,7 @@
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
-import { loops } from '@/lib/db/schema';
+import { loops, Loop } from '@/lib/db/schema';
 import { uuid } from '@/lib/utils/uuid';
 import { PatternId, PATTERN_LIST, getPattern } from '@/lib/orchestrator/patterns';
 import { compileLoop, LoopGraph } from '@/lib/orchestrator/compiler';
@@ -16,9 +16,9 @@ export const dynamic = 'force-dynamic';
 // GET — list all loops
 export async function GET() {
   const db = getDB();
-  const rows = db.select().from(loops).all().sort((a, b) => b.updatedAt - a.updatedAt);
+  const rows = db.select().from(loops).all().sort((a: Loop, b: Loop) => b.updatedAt - a.updatedAt);
   return NextResponse.json({
-    loops: rows.map((r) => ({
+    loops: rows.map((r: Loop) => ({
       ...r,
       graph: JSON.parse(r.graph),
       targets: JSON.parse(r.targets),
