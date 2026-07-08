@@ -3,8 +3,6 @@ const nextConfig = {
   // better-sqlite3 is a native module used server-side only.
   serverExternalPackages: ['better-sqlite3'],
   experimental: { serverActions: { bodySizeLimit: '10mb' } },
-  // Standalone output for Docker deployment
-  output: 'standalone',
 };
 
 export default nextConfig;
