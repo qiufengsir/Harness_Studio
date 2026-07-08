@@ -10,8 +10,9 @@
     "lint": "next lint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "pages:deploy": "npx wrangler pages deploy .vercel/output/static"
+    "preview:worker": "npx opennextjs-cloudflare build && wrangler dev",
+    "build:worker": "npx opennextjs-cloudflare build",
+    "deploy:worker": "npx opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
@@ -43,8 +44,9 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.0",
-    "drizzle-kit": "^0.28.1"
+    "@opennextjs/cloudflare": "^1.0.0",
+    "drizzle-kit": "^0.28.1",
+    "wrangler": "^3.91.0"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.11.1"
