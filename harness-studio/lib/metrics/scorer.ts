@@ -257,3 +257,79 @@ export function scoreCode(code: string, filePath: string): ScoreResult {
 
   return { events, style, security, test, arch, overall, topContributors };
 }
+
+// ---------- Batch Score (multiple files) ----------
+export interface BatchFileResult {
+  filePath: string;
+  lineCount: number;
+  result: ScoreResult;
+}
+
+export interface BatchScoreResult {
+  files: BatchFileResult[];
+  fileCount: number;
+  totalLines: number;
+  // Aggregated dimension scores (average across files)
+  style: number;
+  security: number;
+  test: number;
+  arch: number;
+  overall: number;
+  // Aggregated rule stats
+  ruleStats: { rule: string; dimension: string; passed: number; failed: number; total: number }[];
+  // Aggregated top contributors
+  topContributors: { name: string; dimension: string; impact: number }[];
+}
+
+export function scoreCodeBatch(files: { filePath: string; content: string }[]): BatchScoreResult {
+  const fileResults: BatchFileResult[] = files.map((f) => ({
+    filePath: f.filePath,
+    lineCount: f.content.split('\n').length,
+    result: scoreCode(f.content, f.filePath),
+  }));
+
+  const fileCount = fileResults.length;
+  const totalLines = fileResults.reduce((sum, f) => sum + f.lineCount, 0);
+
+  // Average dimension scores
+  const avg = (selector: (r: ScoreResult) => number) => {
+    if (fileCount === 0) return 0;
+    return Math.round(fileResults.reduce((sum, f) => sum + selector(f.result), 0) / fileCount);
+  };
+
+  const style = avg((r) => r.style);
+  const security = avg((r) => r.security);
+  const test = avg((r) => r.test);
+  const arch = avg((r) => r.arch);
+  const overall = Math.round(style * 0.2 + security * 0.4 + test * 0.2 + arch * 0.2);
+
+  // Aggregate rule stats
+  const ruleMap = new Map<string, { dimension: string; passed: number; failed: number; total: number }>();
+  for (const f of fileResults) {
+    for (const ev of f.result.events) {
+      if (!ruleMap.has(ev.rule)) ruleMap.set(ev.rule, { dimension: ev.dimension, passed: 0, failed: 0, total: 0 });
+      const s = ruleMap.get(ev.rule)!;
+      s.total++;
+      if (ev.passed) s.passed++;
+      else s.failed++;
+    }
+  }
+  const ruleStats = Array.from(ruleMap.entries())
+    .map(([rule, s]) => ({ rule, ...s }))
+    .sort((a, b) => b.failed - a.failed);
+
+  // Aggregate top contributors
+  const contributorMap = new Map<string, { dimension: string; impact: number }>();
+  for (const f of fileResults) {
+    for (const c of f.result.topContributors) {
+      if (!contributorMap.has(c.name)) contributorMap.set(c.name, { dimension: c.dimension, impact: 0 });
+      contributorMap.get(c.name)!.impact += c.impact;
+    }
+  }
+  const topContributors = Array.from(contributorMap.entries())
+    .map(([name, v]) => ({ name, ...v }))
+    .sort((a, b) => b.impact - a.impact)
+    .slice(0, 5);
+
+  return { files: fileResults, fileCount, totalLines, style, security, test, arch, overall, ruleStats, topContributors };
+}

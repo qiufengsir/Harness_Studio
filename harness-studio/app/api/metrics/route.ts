@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
 import { codeSamples, metricEvents, scoreHistory, projects } from '@/lib/db/schema';
-import { scoreCode } from '@/lib/metrics/scorer';
+import { scoreCode, scoreCodeBatch } from '@/lib/metrics/scorer';
 import { randomUUID } from 'node:crypto';
 import { eq, desc } from 'drizzle-orm';
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       id: randomUUID(),
       sampleId,
       rule: ev.rule,
-      passed: ev.passed ? 1 : 0,
+      passed: ev.passed,
       severity: ev.severity,
       detail: ev.detail ?? null,
       createdAt: now,
@@ -137,5 +137,86 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     sampleId,
     score: result,
+  });
+}
+
+// POST /api/metrics?batch=true — submit multiple files for project-level scoring
+export async function PUT(req: NextRequest) {
+  const db = getDB();
+  const body = await req.json();
+  const { files, projectId, source } = body as {
+    files: { filePath: string; content: string }[];
+    projectId?: string;
+    source?: string;
+  };
+
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return NextResponse.json({ error: 'files array required' }, { status: 400 });
+  }
+
+  const now = Date.now();
+  const batchResult = scoreCodeBatch(files);
+
+  // Save each file as a sample + events
+  for (const f of batchResult.files) {
+    const sampleId = randomUUID();
+    db.insert(codeSamples).values({
+      id: sampleId,
+      projectId: projectId ?? null,
+      source: source ?? 'batch',
+      filePath: f.filePath,
+      content: f.result.events.length > 0 ? files.find((x) => x.filePath === f.filePath)?.content ?? '' : '',
+      aiGenerated: true,
+      createdAt: now,
+    }).run();
+
+    for (const ev of f.result.events) {
+      db.insert(metricEvents).values({
+        id: randomUUID(),
+        sampleId,
+        rule: ev.rule,
+        passed: ev.passed,
+        severity: ev.severity,
+        detail: ev.detail ?? null,
+        createdAt: now,
+      }).run();
+    }
+  }
+
+  // Save aggregated score history
+  db.insert(scoreHistory).values({
+    id: randomUUID(),
+    projectId: projectId ?? null,
+    styleScore: batchResult.style,
+    securityScore: batchResult.security,
+    testScore: batchResult.test,
+    archScore: batchResult.arch,
+    overall: batchResult.overall,
+    topContributors: JSON.stringify(batchResult.topContributors),
+    createdAt: now,
+  }).run();
+
+  return NextResponse.json({
+    fileCount: batchResult.fileCount,
+    totalLines: batchResult.totalLines,
+    scores: {
+      style: batchResult.style,
+      security: batchResult.security,
+      test: batchResult.test,
+      arch: batchResult.arch,
+      overall: batchResult.overall,
+    },
+    files: batchResult.files.map((f) => ({
+      filePath: f.filePath,
+      lineCount: f.lineCount,
+      overall: f.result.overall,
+      style: f.result.style,
+      security: f.result.security,
+      test: f.result.test,
+      arch: f.result.arch,
+      failedRules: f.result.events.filter((e) => !e.passed).map((e) => ({ rule: e.rule, detail: e.detail })),
+    })),
+    ruleStats: batchResult.ruleStats,
+    topContributors: batchResult.topContributors,
   });
 }

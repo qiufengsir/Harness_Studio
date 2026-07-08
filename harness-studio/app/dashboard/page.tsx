@@ -4,8 +4,8 @@
 // Dashboard — AI Code Quality Metrics (i18n-aware)
 // Closed loop: submit AI code → score → see trend → adjust configs
 // ============================================================
-import { useEffect, useState, useCallback } from 'react';
-import { BarChart3, Upload, TrendingUp, AlertTriangle, CheckCircle2, Loader2, Code2 } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react';
+import { BarChart3, Upload, TrendingUp, AlertTriangle, CheckCircle2, Loader2, Code2, FolderOpen, X, FileCode } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -42,6 +42,305 @@ interface RuleStat {
   passRate: number;
 }
 
+// 批量评分结果中单个文件的明细
+interface BatchFileRow {
+  filePath: string;
+  lineCount: number;
+  overall: number;
+  style: number;
+  security: number;
+  test: number;
+  arch: number;
+  failedRules: { rule: string; detail: string | null }[];
+}
+
+// 批量评分接口返回结构
+interface BatchResult {
+  fileCount: number;
+  totalLines: number;
+  scores: { style: number; security: number; test: number; arch: number; overall: number };
+  files: BatchFileRow[];
+  ruleStats: { rule: string; dimension: string; passed: number; failed: number; total: number }[];
+  topContributors: { name: string; dimension: string; impact: number }[];
+}
+
+// 已加载的文件条目
+interface LoadedFile {
+  filePath: string;
+  content: string;
+}
+
+// 允许的代码文件扩展名
+const BATCH_ACCEPT = '.ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.vue';
+
+// 批量评分面板
+function BatchPanel({ onScored }: { onScored: () => void }) {
+  const { t } = useI18n();
+  const [files, setFiles] = useState<LoadedFile[]>([]);
+  const [result, setResult] = useState<BatchResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 接收文件列表并合并到已加载文件中（按 filePath 去重）
+  const addFiles = useCallback(async (fileList: FileList | File[]) => {
+    const arr = Array.from(fileList);
+    const next: LoadedFile[] = [];
+    for (const f of arr) {
+      try {
+        const text = await f.text();
+        next.push({ filePath: f.name, content: text });
+      } catch {
+        // 跳过读取失败的文件
+      }
+    }
+    if (next.length === 0) return;
+    setFiles((prev) => {
+      const map = new Map(prev.map((p) => [p.filePath, p]));
+      for (const n of next) map.set(n.filePath, n);
+      return Array.from(map.values());
+    });
+  }, []);
+
+  // 移除指定文件
+  const removeFile = (filePath: string) => {
+    setFiles((prev) => prev.filter((p) => p.filePath !== filePath));
+  };
+
+  // 清空全部
+  const clearAll = () => {
+    setFiles([]);
+    setResult(null);
+    setError(null);
+    setExpanded(null);
+  };
+
+  // 提交全部文件评分
+  const scoreAll = async () => {
+    if (files.length === 0) {
+      setError(t('dash.batch.result.empty'));
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/metrics', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files, source: 'batch' }),
+      });
+      if (!res.ok) throw new Error('Batch score failed');
+      const data: BatchResult = await res.json();
+      setResult(data);
+      onScored();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 拖拽相关事件
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFiles(e.dataTransfer.files);
+    }
+  };
+
+  return (
+    <div>
+      {/* 上传区域 */}
+      <div
+        className={`dropzone border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          dragOver ? 'border-black bg-bg2' : 'border-line hover:border-ink3'
+        }`}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+      >
+        <Upload size={24} className="mx-auto text-ink3 mb-2" />
+        <p className="text-sm font-medium text-ink">{t('dash.batch.drop')}</p>
+        <p className="text-[10px] text-ink3 mt-1">{t('dash.batch.drop.sub')}</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          multiple
+          accept={BATCH_ACCEPT}
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = '';
+          }}
+        />
+      </div>
+
+      {/* 已加载文件列表 */}
+      {files.length > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-ink2">
+              {files.length} {t('dash.batch.loaded')}
+            </span>
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-[10px] text-ink3 hover:text-bad transition-colors"
+            >
+              {t('dash.batch.clear')}
+            </button>
+          </div>
+          <div className="space-y-1 max-h-40 overflow-y-auto">
+            {files.map((f) => (
+              <div
+                key={f.filePath}
+                className="flex items-center gap-2 px-2 py-1.5 rounded bg-bg2 text-xs"
+              >
+                <FileCode size={11} className="text-ink3 flex-shrink-0" />
+                <span className="font-mono text-ink2 truncate flex-1">{f.filePath}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(f.filePath)}
+                  className="text-ink3 hover:text-bad transition-colors flex-shrink-0"
+                  title={t('dash.batch.remove')}
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 评分按钮 */}
+      <div className="flex justify-end mt-4">
+        <Button
+          variant="primary"
+          icon={submitting ? Loader2 : Upload}
+          onClick={scoreAll}
+          disabled={submitting || files.length === 0}
+        >
+          {submitting ? t('dash.batch.scoring') : t('dash.batch.run')}
+        </Button>
+      </div>
+
+      {error && <div className="mt-2 text-xs text-bad">{error}</div>}
+
+      {/* 评分结果 */}
+      {result && (
+        <div className="mt-6">
+          {/* 项目级聚合分数卡片 */}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">{t('dash.batch.result.title')}</h3>
+            <span className="text-[10px] text-ink3">
+              {result.fileCount} {t('dash.batch.result.files')} · {result.totalLines} {t('dash.batch.result.lines')}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+            <Stat
+              label={t('dash.overall')}
+              value={result.scores.overall}
+              tone={result.scores.overall >= 80 ? 'good' : 'warn'}
+            />
+            <Stat label={t('dash.style')} value={result.scores.style} tone="default" />
+            <Stat
+              label={t('dash.security')}
+              value={result.scores.security}
+              tone={result.scores.security >= 80 ? 'good' : 'bad'}
+            />
+            <Stat label={t('dash.test')} value={result.scores.test} tone="default" />
+            <Stat label={t('dash.archFull')} value={result.scores.arch} tone="default" />
+          </div>
+
+          {/* 文件明细表格 */}
+          <h3 className="text-sm font-semibold mb-2">{t('dash.batch.result.fileBreakdown')}</h3>
+          <div className="border border-line rounded-lg overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-bg2 text-ink3">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold">File</th>
+                  <th className="text-right px-3 py-2 font-semibold">Lines</th>
+                  <th className="text-right px-3 py-2 font-semibold">Overall</th>
+                  <th className="text-right px-3 py-2 font-semibold">Style</th>
+                  <th className="text-right px-3 py-2 font-semibold">Security</th>
+                  <th className="text-right px-3 py-2 font-semibold">Test</th>
+                  <th className="text-right px-3 py-2 font-semibold">Arch</th>
+                  <th className="text-right px-3 py-2 font-semibold">Failed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.files.map((f) => {
+                  const isOpen = expanded === f.filePath;
+                  const failedCount = f.failedRules.length;
+                  return (
+                    <Fragment key={f.filePath}>
+                      <tr
+                        onClick={() => setExpanded(isOpen ? null : f.filePath)}
+                        className={`border-t border-line cursor-pointer transition-colors ${
+                          isOpen ? 'bg-bg2' : 'hover:bg-bg2'
+                        }`}
+                      >
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <FileCode size={11} className="text-ink3 flex-shrink-0" />
+                            <span className="font-mono text-ink2 truncate">{f.filePath}</span>
+                          </div>
+                        </td>
+                        <td className="text-right px-3 py-2 text-ink3">{f.lineCount}</td>
+                        <td className="text-right px-3 py-2 font-semibold text-ink">{f.overall}</td>
+                        <td className="text-right px-3 py-2 text-ink2">{f.style}</td>
+                        <td className="text-right px-3 py-2 text-ink2">{f.security}</td>
+                        <td className="text-right px-3 py-2 text-ink2">{f.test}</td>
+                        <td className="text-right px-3 py-2 text-ink2">{f.arch}</td>
+                        <td className="text-right px-3 py-2">
+                          {failedCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-bad">
+                              <AlertTriangle size={10} />
+                              {failedCount}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-good">
+                              <CheckCircle2 size={10} />
+                              0
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                      {isOpen && failedCount > 0 && (
+                        <tr className="border-t border-line bg-bg2">
+                          <td colSpan={8} className="px-3 py-2">
+                            <div className="space-y-1.5 pl-5">
+                              {f.failedRules.map((r, i) => (
+                                <div key={i} className="flex items-start gap-2 text-[11px]">
+                                  <AlertTriangle size={10} className="text-bad mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="font-mono text-ink2">{r.rule}</span>
+                                    {r.detail && (
+                                      <div className="text-ink3 text-[10px] mt-0.5">{r.detail}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { t } = useI18n();
   const [data, setData] = useState<{
@@ -56,6 +355,21 @@ export default function DashboardPage() {
   const [code, setCode] = useState('');
   const [selectedSample, setSelectedSample] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<'single' | 'batch'>('single');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Collect existing file paths for datalist suggestions
+  const knownPaths = data?.samples?.map((s) => s.filePath).filter((v, i, a) => a.indexOf(v) === i) ?? [];
+
+  const handleFilePick = useCallback(async (file: File) => {
+    try {
+      const text = await file.text();
+      setFilePath(file.name);
+      setCode(text);
+    } catch {
+      setError('Failed to read file');
+    }
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -133,36 +447,94 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left: submit + chart */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Submit form */}
+          {/* Submit form with tabs */}
           <Card>
             <CardSection>
               <h2 className="mb-1">{t('dash.submit.title')}</h2>
               <p className="text-xs text-ink3 mb-4">{t('dash.submit.sub')}</p>
-              <div className="grid-2 gap-3 mb-3">
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.filePath')}</label>
-                  <input className="input" placeholder={t('dash.submit.filePath.ph')} value={filePath} onChange={(e) => setFilePath(e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.source')}</label>
-                  <select className="select" disabled>
-                    <option>{t('dash.submit.source.ai')}</option>
-                  </select>
-                </div>
+
+              {/* Tab 切换器：单文件 / 批量文件 */}
+              <div className="flex bg-bg2 rounded-lg p-1 mb-4">
+                <button
+                  onClick={() => setMode('single')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    mode === 'single' ? 'bg-black text-white' : 'text-ink3 hover:text-ink'
+                  }`}
+                >
+                  {t('dash.tab.single')}
+                </button>
+                <button
+                  onClick={() => setMode('batch')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    mode === 'batch' ? 'bg-black text-white' : 'text-ink3 hover:text-ink'
+                  }`}
+                >
+                  {t('dash.tab.batch')}
+                </button>
               </div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.code')}</label>
-              <textarea
-                className="input h-48 font-mono text-[11px]"
-                placeholder={t('dash.submit.code.ph')}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-              />
-              <div className="flex justify-end mt-3">
-                <Button variant="primary" icon={submitting ? Loader2 : Upload} onClick={submit} disabled={submitting}>
-                  {submitting ? t('dash.submit.scoring') : t('dash.submit.run')}
-                </Button>
-              </div>
-              {error && <div className="mt-2 text-xs text-bad">{error}</div>}
+
+              {mode === 'single' ? (
+                <>
+                  <div className="grid-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.filePath')}</label>
+                      <div className="flex gap-2">
+                        <input
+                          className="input flex-1"
+                          placeholder={t('dash.submit.filePath.ph')}
+                          value={filePath}
+                          onChange={(e) => setFilePath(e.target.value)}
+                          list="file-path-suggestions"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3 py-1.5 rounded-md border border-line bg-bg2 text-xs font-medium text-ink2 hover:bg-bg3 hover:text-ink transition-colors flex items-center gap-1.5 flex-shrink-0"
+                          title={t('dash.submit.browse')}
+                        >
+                          <FolderOpen size={12} />
+                          {t('dash.submit.browse')}
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          className="hidden"
+                          accept=".ts,.tsx,.js,.jsx,.py,.go,.rs,.java,.vue,.rb,.php,.c,.cpp,.h,.cs,.swift,.kt,.scala"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFilePick(file);
+                            e.target.value = '';
+                          }}
+                        />
+                      </div>
+                      <datalist id="file-path-suggestions">
+                        {knownPaths.map((p) => <option key={p} value={p} />)}
+                      </datalist>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.source')}</label>
+                      <select className="select" disabled>
+                        <option>{t('dash.submit.source.ai')}</option>
+                      </select>
+                    </div>
+                  </div>
+                  <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('dash.submit.code')}</label>
+                  <textarea
+                    className="input h-48 font-mono text-[11px]"
+                    placeholder={t('dash.submit.code.ph')}
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                  />
+                  <div className="flex justify-end mt-3">
+                    <Button variant="primary" icon={submitting ? Loader2 : Upload} onClick={submit} disabled={submitting}>
+                      {submitting ? t('dash.submit.scoring') : t('dash.submit.run')}
+                    </Button>
+                  </div>
+                  {error && <div className="mt-2 text-xs text-bad">{error}</div>}
+                </>
+              ) : (
+                <BatchPanel onScored={load} />
+              )}
             </CardSection>
           </Card>
 

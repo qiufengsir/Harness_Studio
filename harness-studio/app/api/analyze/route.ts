@@ -9,13 +9,25 @@ import { projects, codeAnalysis, recommendations } from '@/lib/db/schema';
 import { parseFiles, extractDependencies } from '@/lib/analyzer/parser';
 import { runAllDetectors } from '@/lib/analyzer/detector';
 import { recommendFromIssues, maybeAddPipelineLoop } from '@/lib/analyzer/recommender';
+import { decodeFiles } from '@/lib/analyzer/file-decoder';
 import { randomUUID } from 'node:crypto';
+import { checkRateLimit, getClientIP } from '@/lib/middleware/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit check
+    const ip = getClientIP(req);
+    const rate = checkRateLimit(ip);
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests. Please wait a minute and try again.' },
+        { status: 429, headers: { 'Retry-After': String(Math.ceil((rate.resetAt - Date.now()) / 1000)) } }
+      );
+    }
+
     const body = await req.json();
     const { files, projectName, source, sourceRef } = body as {
       files: { path: string; content: string }[];
@@ -27,6 +39,9 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(files) || files.length === 0) {
       return NextResponse.json({ error: 'No files provided' }, { status: 400 });
     }
+
+    // 解码 Base64 编码的二进制文件（PDF/Word）
+    const decodedFiles = await decodeFiles(files);
 
     const db = getDB();
     const now = Date.now();
@@ -43,7 +58,7 @@ export async function POST(req: NextRequest) {
     }).run();
 
     // 2. Parse files
-    const { files: parsed, stats } = parseFiles(files);
+    const { files: parsed, stats } = parseFiles(decodedFiles);
     const { languages, frameworks, projectType } = extractDependencies(parsed);
 
     // 3. Run detectors

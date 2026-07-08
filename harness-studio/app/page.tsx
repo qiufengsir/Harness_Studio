@@ -27,9 +27,13 @@ export default async function LandingPage() {
           <Link href="/reverse">
             <Button variant="primary" icon={ArrowRight}>{t('land.cta.primary')}</Button>
           </Link>
-          <Link href="/orchestrate">
-            <Button variant="ghost">{t('land.cta.secondary')}</Button>
+          <Link href="/demo">
+            <Button variant="ghost" icon={Sparkles}>{t('land.cta.secondary')}</Button>
           </Link>
+        </div>
+        <div className="mt-6 flex items-center gap-3">
+          <span className="text-xs text-ink3">{t('land.demo')}</span>
+          <span className="text-xs text-ink3">{t('land.demoSub')}</span>
         </div>
       </div>
 

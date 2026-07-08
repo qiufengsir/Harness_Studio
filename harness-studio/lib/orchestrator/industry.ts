@@ -18,6 +18,7 @@ export interface IndustryAgent {
 export interface IndustryTemplate {
   id: string;
   name: string;
+  nameZh: string;              // Chinese display name
   keywords: string[];          // for matching
   agentRoster: IndustryAgent[];
   complianceRules: string[];
@@ -26,11 +27,17 @@ export interface IndustryTemplate {
   recommendedPatterns: string[]; // pattern ids that fit this industry
 }
 
+/** Helper: get localized industry name */
+export function industryName(tpl: IndustryTemplate, lang: string): string {
+  return lang === 'zh' ? tpl.nameZh : tpl.name;
+}
+
 const TEMPLATES: IndustryTemplate[] = [
   // ---------- Financial ----------
   {
     id: 'financial',
     name: 'Financial / Fintech',
+    nameZh: '金融 / 金融科技',
     keywords: ['financial', 'fintech', 'banking', 'payment', 'trading', 'audit', 'pci', 'sox'],
     agentRoster: [
       { label: 'Compliance Officer', agent: 'compliance-officer', role: 'reviewer', description: 'PCI-DSS, SOX, KYC checks' },
@@ -59,6 +66,7 @@ const TEMPLATES: IndustryTemplate[] = [
   {
     id: 'ecommerce',
     name: 'Ecommerce / Retail',
+    nameZh: '电商 / 零售',
     keywords: ['ecommerce', 'e-commerce', 'shop', 'store', 'cart', 'checkout', 'merch', 'inventory'],
     agentRoster: [
       { label: 'Catalog Engineer', agent: 'catalog-engineer', role: 'worker', description: 'Product schema, search, facets' },
@@ -85,6 +93,7 @@ const TEMPLATES: IndustryTemplate[] = [
   {
     id: 'iot',
     name: 'IoT / Embedded',
+    nameZh: '物联网 / 嵌入式',
     keywords: ['iot', 'device', 'sensor', 'mqtt', 'edge', 'embedded', 'firmware'],
     agentRoster: [
       { label: 'Device Protocol Engineer', agent: 'device-protocol', role: 'worker', description: 'MQTT, CoAP, binary protocols' },
@@ -111,6 +120,7 @@ const TEMPLATES: IndustryTemplate[] = [
   {
     id: 'healthcare',
     name: 'Healthcare / HIPAA',
+    nameZh: '医疗 / HIPAA 合规',
     keywords: ['healthcare', 'medical', 'hipaa', 'patient', 'clinic', 'hospital', 'phi', 'ehr'],
     agentRoster: [
       { label: 'HIPAA Compliance Officer', agent: 'hipaa-officer', role: 'reviewer', description: 'PHI handling, access logs' },
@@ -139,6 +149,7 @@ const TEMPLATES: IndustryTemplate[] = [
   {
     id: 'data',
     name: 'Data / ML / Analytics',
+    nameZh: '数据 / 机器学习 / 分析',
     keywords: ['data', 'analytics', 'pipeline', 'etl', 'warehouse', 'ml', 'machine learning', 'model', 'training'],
     agentRoster: [
       { label: 'Data Engineer', agent: 'data-engineer', role: 'worker', description: 'ETL, schemas, partitions' },
@@ -165,6 +176,7 @@ const TEMPLATES: IndustryTemplate[] = [
   {
     id: 'web',
     name: 'General Web App',
+    nameZh: '通用 Web 应用',
     keywords: ['web', 'app', 'saas', 'dashboard', 'admin'],
     agentRoster: [
       { label: 'Frontend Worker', agent: 'frontend-architect', role: 'worker', description: 'UI components + state' },

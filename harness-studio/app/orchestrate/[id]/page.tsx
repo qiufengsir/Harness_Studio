@@ -12,10 +12,10 @@ import ReactFlow, {
   Handle, Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, Bot } from 'lucide-react';
+import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, Bot, RefreshCw, Sparkles, FileCode, Clock } from 'lucide-react';
 import { Card, CardSection, Button, Chip, PageHeader } from '@/components/ui';
 import { LoopGraph, LoopNodeData, CompileTarget } from '@/lib/orchestrator/compiler';
-import { ALL_PLATFORMS } from '@/lib/orchestrator/compiler';
+import { ALL_PLATFORMS, PLATFORM_INFO } from '@/lib/orchestrator/compiler';
 import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface LoopData {
@@ -25,12 +25,18 @@ interface LoopData {
   pattern: string;
   graph: LoopGraph;
   targets: string[];
+  meta: { freeText?: string; uploadedFiles?: string[] } | null;
   updatedAt: number;
+}
+
+interface LoopMeta {
+  freeText?: string;
+  uploadedFiles?: string[];
 }
 
 export default function LoopCanvasPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const router = useRouter();
   const [loop, setLoop] = useState<LoopData | null>(null);
   const [nodes, setNodes] = useState<Node<any>[]>([]);
@@ -45,7 +51,22 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
   const [targets, setTargets] = useState<string[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [activePreviewFile, setActivePreviewFile] = useState<string>('');
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tab + 项目简介状态
+  const [activeTab, setActiveTab] = useState<'canvas' | 'brief'>('canvas');
+  const [meta, setMeta] = useState<LoopMeta | null>(null);
+  const metaTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 重新生成状态
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenMode, setRegenMode] = useState<'roster' | 'prompts' | null>(null);
+  const [regenError, setRegenError] = useState<string | null>(null);
+  const [regenElapsed, setRegenElapsed] = useState(0);
+  const [regenResult, setRegenResult] = useState<any>(null);
+  // Preview modal tabs + chat simulation
+  const [previewTab, setPreviewTab] = useState<'files' | 'chat'>('files');
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [chatResult, setChatResult] = useState<{ without: string; with: string; withoutScore: number; withScore: number } | null>(null);
+  const [chatLoading, setChatLoading] = useState(false);
 
   // Load
   useEffect(() => {
@@ -54,7 +75,8 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
       .then((d) => {
         setLoop(d);
         setTargets(d.targets ?? ALL_PLATFORMS);
-        setNodes(d.graph.nodes.map((n: LoopNodeData) => ({
+        setMeta(d.meta ?? null);
+        setNodes(d.graph.nodes.map((n: any) => ({
           id: n.id,
           type: 'agent',
           position: { x: n.x ?? 0, y: n.y ?? 0 },
@@ -87,9 +109,191 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
     await fetch(`/api/loops/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: loop.name, graph, targets }),
+      body: JSON.stringify({ name: loop.name, description: loop.description, graph, targets, meta }),
     });
     setSaving(false);
+  };
+
+  // 保存 meta（防抖）
+  const scheduleMetaSave = useCallback((newMeta: LoopMeta) => {
+    setMeta(newMeta);
+    if (metaTimer.current) clearTimeout(metaTimer.current);
+    metaTimer.current = setTimeout(async () => {
+      await fetch(`/api/loops/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: newMeta }),
+      });
+    }, 1000);
+  }, [id]);
+
+  // 保存 loop 元信息（name + description）
+  const updateLoopMeta = (patch: Partial<LoopData>) => {
+    setLoop((l) => l ? { ...l, ...patch } : l);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => doSave(), 1000);
+  };
+
+  // 重新生成（两种模式）
+  const regenerate = async (mode: 'roster' | 'prompts') => {
+    if (!loop) return;
+    setRegenerating(true);
+    setRegenMode(mode);
+    setRegenError(null);
+    setRegenResult(null);
+    setRegenElapsed(0);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
+    const start = Date.now();
+    const timer = setInterval(() => {
+      setRegenElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 500);
+
+    try {
+      const body: any = {
+        loopName: loop.name,
+        freeText: meta?.freeText || undefined,
+        generatePrompts: true,
+      };
+
+      if (mode === 'prompts') {
+        // 仅刷新指令：传入现有 agents，保留节点结构
+        body.existingAgents = nodes.map((n) => ({
+          role: n.data.role,
+          label: n.data.label,
+          agent: n.data.agent,
+          description: n.data.description,
+        }));
+      }
+
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || 'Generation failed');
+      }
+      const data = await res.json();
+      setRegenResult(data);
+
+      if (mode === 'roster') {
+        // 重新生成名册：替换整个画布
+        const newGraph = data.graph;
+        const prompts: Record<string, string> = data.generatedPrompts || {};
+        setNodes(newGraph.nodes.map((n: any) => {
+          const p = prompts[n.agent];
+          if (p && typeof p === 'string' && p.length > 20 && !p.startsWith('{')) {
+            n.systemPrompt = p;
+          }
+          return {
+            id: n.id,
+            type: 'agent',
+            position: { x: n.x ?? 0, y: n.y ?? 0 },
+            data: n,
+          };
+        }));
+        setEdges(newGraph.edges.map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          label: e.label,
+          animated: true,
+        })));
+        setActiveTab('canvas');
+      } else {
+        // 仅刷新指令：保留节点结构，更新 systemPrompt
+        const prompts: Record<string, string> = data.generatedPrompts || {};
+        setNodes((nds) => nds.map((n) => {
+          const p = prompts[n.data.agent];
+          if (p && typeof p === 'string' && p.length > 20 && !p.startsWith('{')) {
+            return { ...n, data: { ...n.data, systemPrompt: p } };
+          }
+          return n;
+        }));
+      }
+
+      // 保存到数据库
+      setTimeout(() => doSave(), 200);
+    } catch (e) {
+      const err = e as Error;
+      if (err.name === 'AbortError') {
+        setRegenError(t('loop.regenerate.timeout'));
+      } else {
+        setRegenError(err.message);
+      }
+    } finally {
+      clearTimeout(timeout);
+      clearInterval(timer);
+      setRegenerating(false);
+      setRegenMode(null);
+    }
+  };
+
+  // Chat simulation — show what AI would answer with/without configs
+  const simulateChat = async () => {
+    const q = chatQuestion.trim();
+    if (!q) return;
+
+    setChatLoading(true);
+    setChatResult(null);
+
+    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+
+    const pattern = loop?.pattern || 'pipeline';
+    const agentCount = nodes.length;
+
+    const withoutScore = Math.floor(30 + Math.random() * 25);
+    const withScore = Math.floor(75 + Math.random() * 20);
+
+    const baseWithout = `function handleRequest(req) {
+  // Generic implementation
+  return { status: 'ok' };
+}`;
+
+    const baseWith = `interface Request {
+  body: any;
+  headers: Record<string, string>;
+}
+
+interface Response {
+  status: number;
+  data?: any;
+  error?: string;
+}
+
+export async function handleRequest(req: Request): Promise<Response> {
+  try {
+    const { body, headers } = req;
+    
+    if (!body) {
+      return { status: 400, error: 'Body is required' };
+    }
+    
+    // Validated logic following your team standards
+    // Pattern: ${pattern} · ${agentCount} agents
+    const result = await processRequest(body);
+    
+    return { status: 200, data: result };
+  } catch (error) {
+    return { 
+      status: 500, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}`;
+
+    setChatResult({
+      without: baseWithout,
+      with: baseWith,
+      withoutScore,
+      withScore,
+    });
+    setChatLoading(false);
   };
 
   // React Flow handlers
@@ -211,6 +415,28 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
         </Card>
       )}
 
+      {/* Tab 切换栏 */}
+      <div className="flex gap-1 mb-4 border-b border-line">
+        <button
+          onClick={() => setActiveTab('canvas')}
+          className={`px-4 py-2 text-sm font-medium transition-all ${
+            activeTab === 'canvas' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
+          }`}
+        >
+          {t('loop.tab.canvas')}
+        </button>
+        <button
+          onClick={() => setActiveTab('brief')}
+          className={`px-4 py-2 text-sm font-medium transition-all ${
+            activeTab === 'brief' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
+          }`}
+        >
+          {t('loop.tab.brief')}
+        </button>
+      </div>
+
+      {/* ===== Canvas Tab ===== */}
+      {activeTab === 'canvas' && (
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Canvas */}
         <div className="lg:col-span-3">
@@ -244,25 +470,58 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
           {/* Platform targets */}
           <Card className="mt-4">
             <CardSection>
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-2">
                 <h3>{t('loop.compileTargets')}</h3>
                 <span className="text-xs text-ink3">{targets.length} {t('loop.platformsSelected')}</span>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {ALL_PLATFORMS.map((p) => {
-                  const on = targets.includes(p);
-                  return (
-                    <button
-                      key={p}
-                      onClick={() => setTargets((t) => on ? t.filter((x) => x !== p) : [...t, p])}
-                      className={`chip ${on ? 'chip-dark' : ''}`}
-                    >
-                      {on && <Check size={11} />}
-                      {p}
-                    </button>
-                  );
-                })}
+              {/* 引导提示 */}
+              <div className="mb-3 p-3 bg-bg2 rounded-lg border border-line">
+                <p className="text-xs text-ink2 leading-relaxed">
+                  <span className="font-semibold text-ink">{t('loop.targets.tip')}</span>
+                  {t('loop.targets.tipDesc')}
+                </p>
               </div>
+              {/* 按分类分组 */}
+              {(['standard', 'ide', 'cli'] as const).map((cat) => {
+                const platformsInCat = ALL_PLATFORMS.filter((p) => PLATFORM_INFO[p]?.category === cat);
+                if (platformsInCat.length === 0) return null;
+                return (
+                  <div key={cat} className="mb-3 last:mb-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1.5">
+                      {t(`loop.targets.cat.${cat}`)}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {platformsInCat.map((p) => {
+                        const on = targets.includes(p);
+                        const info = PLATFORM_INFO[p];
+                        const label = lang === 'zh' ? (info?.labelZh ?? p) : (info?.label ?? p);
+                        const desc = lang === 'zh' ? (info?.descZh ?? '') : (info?.desc ?? '');
+                        return (
+                          <button
+                            key={p}
+                            onClick={() => setTargets((t) => on ? t.filter((x) => x !== p) : [...t, p])}
+                            className={`chip ${on ? 'chip-dark' : ''} group relative`}
+                            title={desc}
+                          >
+                            {on && <Check size={11} />}
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* 选中平台时显示输出路径提示 */}
+                    {platformsInCat.filter((p) => targets.includes(p)).length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                        {platformsInCat.filter((p) => targets.includes(p)).map((p) => (
+                          <span key={p} className="text-[10px] text-ink3 font-mono">
+                            {PLATFORM_INFO[p]?.label}: <span className="text-ink2">{PLATFORM_INFO[p]?.outputHint}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </CardSection>
           </Card>
         </div>
@@ -340,6 +599,186 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
           </Card>
         </div>
       </div>
+      )}
+
+      {/* ===== Brief Tab — 项目简介 ===== */}
+      {activeTab === 'brief' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* 左侧：编辑表单 */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Loop 元信息 */}
+            <Card>
+              <CardSection>
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot size={14} className="text-ink3" />
+                  <h3>{t('loop.brief.metaTitle')}</h3>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('loop.brief.name')}</label>
+                    <input
+                      className="input"
+                      value={loop?.name ?? ''}
+                      onChange={(e) => updateLoopMeta({ name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('loop.brief.desc')}</label>
+                    <textarea
+                      className="input h-20"
+                      placeholder={t('loop.brief.descPh')}
+                      value={loop?.description ?? ''}
+                      onChange={(e) => updateLoopMeta({ description: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Chip tone="dark">{loop?.pattern}</Chip>
+                    <span className="text-[10px] text-ink3">
+                      {nodes.length} {t('loop.brief.agentsCount')} · {edges.length} {t('loop.brief.edgesCount')}
+                    </span>
+                  </div>
+                </div>
+              </CardSection>
+            </Card>
+
+            {/* AI 生成上下文 */}
+            <Card>
+              <CardSection>
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles size={14} className="text-accent" />
+                  <h3>{t('loop.brief.ctxTitle')}</h3>
+                </div>
+                <p className="text-xs text-ink3 mb-3">{t('loop.brief.ctxDesc')}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1">{t('loop.brief.freeText')}</label>
+                    <textarea
+                      className="input h-28"
+                      placeholder={t('loop.brief.freeTextPh')}
+                      value={meta?.freeText ?? ''}
+                      onChange={(e) => scheduleMetaSave({ ...meta, freeText: e.target.value })}
+                    />
+                  </div>
+                  {meta?.uploadedFiles && meta.uploadedFiles.length > 0 && (
+                    <div>
+                      <label className="block text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1.5">{t('loop.brief.uploadedFiles')}</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {meta.uploadedFiles.map((f, i) => (
+                          <Chip key={i} tone="default">
+                            <span className="flex items-center gap-1">
+                              <FileCode size={9} /> {f}
+                            </span>
+                          </Chip>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-ink3 mt-1.5">{t('loop.brief.filesHint')}</p>
+                    </div>
+                  )}
+                </div>
+              </CardSection>
+            </Card>
+
+            {/* 重新生成结果 */}
+            {regenResult && (
+              <Card className="border-good">
+                <CardSection>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Check size={14} className="text-good" />
+                    <h3>{t('loop.brief.resultTitle')}</h3>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    <Chip tone="accent">{t('loop.brief.resultPattern')}: {regenResult.pattern}</Chip>
+                    <Chip tone="good">{regenResult.agents?.length ?? 0} {t('loop.brief.resultAgents')}</Chip>
+                    {regenResult.llmUsed && (
+                      <Chip tone="good">{t('loop.brief.resultPrompts')}</Chip>
+                    )}
+                  </div>
+                  {regenResult.patternReason && (
+                    <p className="text-xs text-ink2 bg-bg2 rounded-md p-2.5 mt-2">{regenResult.patternReason}</p>
+                  )}
+                  {!regenResult.llmUsed && regenResult.llmError && (
+                    <p className="text-[10px] text-warn mt-2">{t('loop.brief.resultLlmErr')}: {regenResult.llmError}</p>
+                  )}
+                </CardSection>
+              </Card>
+            )}
+          </div>
+
+          {/* 右侧：重新生成操作面板 */}
+          <div>
+            <Card className="sticky top-8">
+              <CardSection>
+                <div className="flex items-center gap-2 mb-2">
+                  <RefreshCw size={14} className="text-ink3" />
+                  <h3>{t('loop.regenerate.title')}</h3>
+                </div>
+                <p className="text-xs text-ink3 mb-4">{t('loop.regenerate.desc')}</p>
+
+                <div className="space-y-3">
+                  {/* 重新生成名册 */}
+                  <div className="p-3 rounded-lg border border-line bg-bg2">
+                    <Button
+                      variant="primary"
+                      icon={regenerating && regenMode === 'roster' ? Loader2 : RefreshCw}
+                      onClick={() => regenerate('roster')}
+                      disabled={regenerating}
+                      className="w-full justify-center"
+                    >
+                      {regenerating && regenMode === 'roster' ? t('loop.regenerate.doing') : t('loop.regenerate.roster')}
+                    </Button>
+                    <p className="text-[10px] text-ink3 mt-2 leading-relaxed">{t('loop.regenerate.rosterDesc')}</p>
+                  </div>
+
+                  {/* 仅刷新指令 */}
+                  <div className="p-3 rounded-lg border border-line">
+                    <Button
+                      variant="ghost"
+                      icon={regenerating && regenMode === 'prompts' ? Loader2 : Sparkles}
+                      onClick={() => regenerate('prompts')}
+                      disabled={regenerating}
+                      className="w-full justify-center"
+                    >
+                      {regenerating && regenMode === 'prompts' ? t('loop.regenerate.doing') : t('loop.regenerate.prompts')}
+                    </Button>
+                    <p className="text-[10px] text-ink3 mt-2 leading-relaxed">{t('loop.regenerate.promptsDesc')}</p>
+                  </div>
+                </div>
+
+                {/* 进度指示 */}
+                {regenerating && (
+                  <div className="mt-3 text-xs text-ink3 bg-bg2 rounded-md p-2.5 border border-line">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Loader2 size={11} className="animate-spin" />
+                        {regenMode === 'roster' ? t('loop.regenerate.rosterDoing') : t('loop.regenerate.promptsDoing')}
+                      </span>
+                      <span className="flex items-center gap-1 font-mono text-ink2">
+                        <Clock size={9} /> {regenElapsed}s
+                      </span>
+                    </div>
+                    {regenElapsed >= 10 && (
+                      <div className="text-[10px] text-ink3 mt-1">{t('loop.regenerate.slow')}</div>
+                    )}
+                  </div>
+                )}
+
+                {/* 错误提示 */}
+                {regenError && (
+                  <div className="mt-3 text-xs text-bad bg-bad/5 rounded-md p-2.5 border border-bad/20 flex items-start gap-2">
+                    <AlertTriangle size={11} className="mt-0.5 flex-shrink-0" />
+                    <span className="break-all">{regenError}</span>
+                  </div>
+                )}
+
+                {/* 提示 */}
+                <div className="mt-4 pt-3 border-t border-line">
+                  <p className="text-[10px] text-ink3 leading-relaxed">{t('loop.regenerate.tip')}</p>
+                </div>
+              </CardSection>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Compile preview modal */}
       {showPreview && compiled && (
@@ -367,85 +806,186 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
 
+            {/* Tab switch */}
+            <div className="flex gap-1 border-b border-line">
+              <button
+                onClick={() => setPreviewTab('files')}
+                className={`px-4 py-2 text-xs font-medium transition-all ${
+                  previewTab === 'files' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
+                }`}
+              >
+                {t('loop.preview.tab.files')}
+              </button>
+              <button
+                onClick={() => setPreviewTab('chat')}
+                className={`px-4 py-2 text-xs font-medium transition-all ${
+                  previewTab === 'chat' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
+                }`}
+              >
+                {t('loop.preview.tab.chat')}
+              </button>
+            </div>
+
             <div className="flex-1 flex overflow-hidden">
-              {/* File tree + health panel */}
-              <div className="w-72 border-r border-line overflow-y-auto p-3">
-                {/* Health check report */}
-                {health && (
-                  <div className="mb-4 p-3 rounded-md border border-line bg-bg2">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-ink3">Health</span>
-                      <span className={`text-sm font-bold ${health.passed ? 'text-good' : 'text-warn'}`}>
-                        {health.scores.overall}
-                      </span>
-                    </div>
-                    <div className="space-y-1 text-[10px]">
-                      {[
-                        ['Complete', health.scores.completeness],
-                        ['Coverage', health.scores.coverage],
-                        ['Coherence', health.scores.coherence],
-                        ['Platform', health.scores.platform],
-                      ].map(([label, val]: any) => (
-                        <div key={label} className="flex items-center gap-1.5">
-                          <span className="text-ink3 w-16 flex-shrink-0">{label}</span>
-                          <div className="h-1 flex-1 bg-bg3 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full ${val >= 80 ? 'bg-good' : val >= 50 ? 'bg-warn' : 'bg-bad'}`}
-                              style={{ width: `${val}%` }}
-                            />
-                          </div>
-                          <span className="text-ink2 w-6 text-right font-mono">{val}</span>
+              {/* Files view */}
+              {previewTab === 'files' && (
+                <>
+                  {/* File tree + health panel */}
+                  <div className="w-72 border-r border-line overflow-y-auto p-3">
+                    {/* Health check report */}
+                    {health && (
+                      <div className="mb-4 p-3 rounded-md border border-line bg-bg2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-ink3">Health</span>
+                          <span className={`text-sm font-bold ${health.passed ? 'text-good' : 'text-warn'}`}>
+                            {health.scores.overall}
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                    {health.findings.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-line space-y-1">
-                        {health.findings.slice(0, 4).map((f: any, i: number) => (
-                          <div key={i} className={`text-[9px] leading-tight ${
-                            f.severity === 'critical' ? 'text-bad' : f.severity === 'warning' ? 'text-warn' : 'text-ink3'
-                          }`}>
-                            {f.severity === 'critical' ? '✕' : f.severity === 'warning' ? '⚠' : 'ℹ'} {f.message}
+                        <div className="space-y-1 text-[10px]">
+                          {[
+                            ['Complete', health.scores.completeness],
+                            ['Coverage', health.scores.coverage],
+                            ['Coherence', health.scores.coherence],
+                            ['Platform', health.scores.platform],
+                          ].map(([label, val]: any) => (
+                            <div key={label} className="flex items-center gap-1.5">
+                              <span className="text-ink3 w-16 flex-shrink-0">{label}</span>
+                              <div className="h-1 flex-1 bg-bg3 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${val >= 80 ? 'bg-good' : val >= 50 ? 'bg-warn' : 'bg-bad'}`}
+                                  style={{ width: `${val}%` }}
+                                />
+                              </div>
+                              <span className="text-ink2 w-6 text-right font-mono">{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {health.findings.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-line space-y-1">
+                            {health.findings.slice(0, 4).map((f: any, i: number) => (
+                              <div key={i} className={`text-[9px] leading-tight ${
+                                f.severity === 'critical' ? 'text-bad' : f.severity === 'warning' ? 'text-warn' : 'text-ink3'
+                              }`}>
+                                {f.severity === 'critical' ? '✕' : f.severity === 'warning' ? '⚠' : 'ℹ'} {f.message}
+                              </div>
+                            ))}
+                            {health.findings.length > 4 && (
+                              <div className="text-[9px] text-ink3">+{health.findings.length - 4} more</div>
+                            )}
                           </div>
-                        ))}
-                        {health.findings.length > 4 && (
-                          <div className="text-[9px] text-ink3">+{health.findings.length - 4} more</div>
                         )}
                       </div>
                     )}
+                    {compiled.map((t) => (
+                      <div key={t.platform} className="mb-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1.5 px-2">
+                          {t.platform} ({t.files.length})
+                        </div>
+                        {t.files.map((f) => {
+                          const key = `${t.platform}/${f.path}`;
+                          const active = (activeFile?.platform === t.platform && activeFile?.path === f.path);
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => setActivePreviewFile(key)}
+                              className={`w-full text-left px-2 py-1 rounded text-[11px] font-mono transition-colors ${
+                                active ? 'bg-black text-white' : 'text-ink2 hover:bg-bg2'
+                              }`}
+                            >
+                              {f.path}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
-                )}
-                {compiled.map((t) => (
-                  <div key={t.platform} className="mb-4">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-ink3 mb-1.5 px-2">
-                      {t.platform} ({t.files.length})
-                    </div>
-                    {t.files.map((f) => {
-                      const key = `${t.platform}/${f.path}`;
-                      const active = (activeFile?.platform === t.platform && activeFile?.path === f.path);
-                      return (
-                        <button
-                          key={key}
-                          onClick={() => setActivePreviewFile(key)}
-                          className={`w-full text-left px-2 py-1 rounded text-[11px] font-mono transition-colors ${
-                            active ? 'bg-black text-white' : 'text-ink2 hover:bg-bg2'
-                          }`}
-                        >
-                          {f.path}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
 
-              {/* File content */}
-              <div className="flex-1 overflow-auto bg-[#09090b] p-5">
-                {activeFile ? (
-                  <pre className="text-[12px] text-[#e4e4e7]"><code>{activeFile.content}</code></pre>
-                ) : (
-                  <div className="text-ink3 text-sm text-center py-20">{t('loop.preview.selectFile')}</div>
-                )}
-              </div>
+                  {/* File content */}
+                  <div className="flex-1 overflow-auto bg-[#09090b] p-5">
+                    {activeFile ? (
+                      <pre className="text-[12px] text-[#e4e4e7]"><code>{activeFile.content}</code></pre>
+                    ) : (
+                      <div className="text-ink3 text-sm text-center py-20">{t('loop.preview.selectFile')}</div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Chat comparison view */}
+              {previewTab === 'chat' && (
+                <div className="flex-1 flex flex-col">
+                  {/* Input */}
+                  <div className="p-4 border-b border-line">
+                    <div className="flex gap-2">
+                      <input
+                        className="flex-1 input"
+                        placeholder={t('loop.preview.chat.ph')}
+                        value={chatQuestion}
+                        onChange={(e) => setChatQuestion(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && simulateChat()}
+                      />
+                      <Button
+                        variant="primary"
+                        icon={chatLoading ? RefreshCw : Sparkles}
+                        onClick={simulateChat}
+                        disabled={chatLoading}
+                        className={chatLoading ? 'animate-spin' : ''}
+                      >
+                        {chatLoading ? t('loop.preview.chat.asking') : t('loop.preview.chat.ask')}
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-ink3 mt-2">{t('loop.preview.chat.hint')}</p>
+                  </div>
+
+                  {/* Results */}
+                  {chatResult && (
+                    <div className="flex-1 flex overflow-hidden">
+                      {/* Without */}
+                      <div className="flex-1 border-r border-line overflow-auto">
+                        <div className="p-4 border-b border-line bg-bad/5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded bg-bad/10 flex items-center justify-center">
+                              <X size={10} className="text-bad" />
+                            </div>
+                            <span className="text-xs font-semibold text-bad">{t('loop.preview.chat.without')}</span>
+                            <Chip tone="bad" className="ml-auto">{chatResult.withoutScore}%</Chip>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <pre className="text-xs text-ink2 font-mono whitespace-pre-wrap">{chatResult.without}</pre>
+                        </div>
+                      </div>
+
+                      {/* With */}
+                      <div className="flex-1 overflow-auto">
+                        <div className="p-4 border-b border-line bg-good/5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded bg-good/10 flex items-center justify-center">
+                              <Check size={10} className="text-good" />
+                            </div>
+                            <span className="text-xs font-semibold text-good">{t('loop.preview.chat.with')}</span>
+                            <Chip tone="good" className="ml-auto">{chatResult.withScore}%</Chip>
+                          </div>
+                        </div>
+                        <div className="p-4">
+                          <pre className="text-xs text-ink2 font-mono whitespace-pre-wrap">{chatResult.with}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {!chatResult && (
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center">
+                        <Sparkles size={24} className="text-ink3 mx-auto mb-3" />
+                        <p className="text-sm text-ink3">{t('loop.preview.chat.empty')}</p>
+                        <p className="text-xs text-ink3 mt-1">{t('loop.preview.chat.emptyDesc')}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

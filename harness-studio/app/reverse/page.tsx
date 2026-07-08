@@ -29,9 +29,18 @@ export default function ReverseImportPage() {
     setError(null);
     const collected: { path: string; content: string }[] = [];
     for (const file of Array.from(dropped)) {
+      const isPdf = /\.pdf$/i.test(file.name);
+      const isDocx = /\.docx?$/i.test(file.name);
       try {
-        const text = await file.text();
-        collected.push({ path: (file as any).webkitRelativePath || file.name, content: text });
+        if (isPdf || isDocx) {
+          // 二进制文档用 Base64 编码，API 端解码
+          const buffer = await file.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          collected.push({ path: (file as any).webkitRelativePath || file.name, content: `__BASE64__:${base64}` });
+        } else {
+          const text = await file.text();
+          collected.push({ path: (file as any).webkitRelativePath || file.name, content: text });
+        }
       } catch {
         // skip binary
       }

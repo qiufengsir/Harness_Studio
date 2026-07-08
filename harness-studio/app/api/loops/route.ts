@@ -51,13 +51,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Default: create new loop
-  const { name, description, pattern, graph, targets, agentPrompts } = body as {
+  const { name, description, pattern, graph, targets, agentPrompts, meta } = body as {
     name: string;
     description?: string;
     pattern: PatternId;
     graph?: LoopGraph;
     targets?: string[];
     agentPrompts?: Record<string, string>; // agent name -> system prompt
+    meta?: { freeText?: string; uploadedFiles?: string[] } | null;
   };
 
   // If no graph provided, scaffold from pattern template
@@ -91,6 +92,7 @@ export async function POST(req: NextRequest) {
     pattern,
     graph: JSON.stringify(finalGraph),
     targets: JSON.stringify(targets ?? ['agents', 'claude', 'cursor', 'copilot', 'trae']),
+    meta: meta ? JSON.stringify(meta) : null,
     createdAt: now,
     updatedAt: now,
   }).run();

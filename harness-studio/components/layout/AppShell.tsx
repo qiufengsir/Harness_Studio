@@ -9,6 +9,7 @@ import { usePathname } from 'next/navigation';
 import { Boxes, GitBranch, Workflow, BarChart3, Settings, Languages } from 'lucide-react';
 import { cn } from '../ui';
 import { useI18n } from '@/components/i18n/I18nProvider';
+import { OnboardingGuide, OnboardingButton } from '@/components/onboarding/OnboardingGuide';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -99,6 +100,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 min-w-0">
         <div className="px-8 py-8 max-w-7xl mx-auto">{children}</div>
       </main>
+
+      {/* 悬浮球 — 右上角，点击触发新手引导 */}
+      <OnboardingButton />
+      {/* Onboarding guide (auto-shows on first visit) */}
+      <OnboardingGuide />
     </div>
   );
 }

@@ -54,6 +54,8 @@ export const loops = sqliteTable('loops', {
   graph: text('graph').notNull(),      // JSON { nodes, edges }
   // Compile targets (which platforms to export)
   targets: text('targets').notNull(),  // JSON string[]
+  // AI 生成上下文（freeText + 上传文件名列表），用于重新生成
+  meta: text('meta'),                  // JSON { freeText, uploadedFiles }
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

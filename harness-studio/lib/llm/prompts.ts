@@ -27,21 +27,22 @@ export interface GeneratedAgent {
  */
 function metaSystemPrompt(): string {
   return `You are a Staff Engineer who designs multi-agent AI workflows.
-Given a project context and a list of agent roles, you write detailed,
+Given a project context and a list of agent roles, you write concise,
 specific, executable system prompts for each agent.
 
 Rules for each agent's system prompt:
-- 15 to 30 lines of concrete instructions
-- Reference the actual tech stack, file paths, and tools
-- Include Responsibilities (bullet list)
-- Include File scope (globs)
-- Include Hand-off protocol (what to return, when)
-- Include Quality bar (what "done" means)
+- 8 to 15 lines of concrete instructions (keep it tight)
+- Reference the actual tech stack and tools when known
+- Include Responsibilities (1-2 lines)
+- Include File scope (globs, 1 line)
+- Include Hand-off protocol (1 line: what to return)
+- Include Quality bar (1 line: what "done" means)
 - No filler ("you are a helpful assistant") — every line must add value
-- Plain text, no markdown headers (the platform adds structure)
+- Plain text, no markdown headers
 
 Output: a JSON object mapping each agent name to its system prompt string.
-Never include the agent name inside its own prompt (redundant).`;
+Never include the agent name inside its own prompt (redundant).
+Do NOT wrap your response in markdown fences. Output raw JSON only.`;
 }
 
 /**

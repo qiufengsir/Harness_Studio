@@ -11,8 +11,9 @@
 import { matchIndustry, fallbackIndustry, type IndustryTemplate } from './industry';
 import { PATTERNS, type PatternId, type PatternDef, type PatternNode } from './patterns';
 import type { ProjectContext } from '@/lib/llm/context-parser';
-import { llmGenerateJSON, isProviderAvailable } from '@/lib/llm/client';
+import { llmGenerateJSON, isProviderAvailable, availableProviders } from '@/lib/llm/client';
 import { buildAgentRecommendPrompt } from '@/lib/llm/prompts';
+import { resolveProvider } from '@/lib/llm/prefs';
 
 export interface RecommendedAgent {
   label: string;
@@ -45,7 +46,7 @@ export async function recommendRoster(args: {
   const industry = matchIndustry(text) ?? fallbackIndustry();
 
   // Determine pattern
-  let pattern: PatternId = args.pattern ?? industry.recommendedPatterns[0] ?? 'worker-leader';
+  let pattern: PatternId = args.pattern ?? (industry.recommendedPatterns[0] as PatternId) ?? 'worker-leader';
   let patternReason = `Recommended for ${industry.name} industry.`;
   if (ctx) {
     const inferred = inferPatternFromContext(ctx, industry);
@@ -63,17 +64,22 @@ export async function recommendRoster(args: {
     description: a.description,
   }));
 
-  // Try LLM enrichment
-  const llmReady = useLLM && isProviderAvailable('openai') || isProviderAvailable('anthropic');
-  if (useLLM && llmReady && ctx) {
+  // Note: LLM-based roster recommendation is intentionally disabled here.
+  // The industry KB + context tweaks already produce high-quality rosters
+  // instantly. We save the LLM call for prompt generation (the high-value
+  // step in /api/generate). This keeps total latency to one LLM round-trip
+  // instead of two, avoiding 60s+ "stuck" UX.
+  // If you want LLM roster recommendations back, set USE_LLM_ROSTER=true.
+  const USE_LLM_ROSTER = false;
+  if (USE_LLM_ROSTER && useLLM && availableProviders().length > 0 && ctx) {
     try {
+      const { provider, model } = await resolveProvider();
       const llmAgents = await llmGenerateJSON<RecommendedAgent[]>({
         system: 'You recommend agent rosters for multi-agent AI workflows. Respond with JSON only.',
         prompt: buildAgentRecommendPrompt(loopName, pattern, ctx, industry.id),
-        config: { temperature: 0.6, maxTokens: 1500 },
+        config: { provider, model: model ?? undefined, temperature: 0.6, maxTokens: 1500 },
       });
       if (Array.isArray(llmAgents) && llmAgents.length >= 3) {
-        // Validate roles
         const validRoles = new Set(['leader','worker','reviewer','security','tester','doc-writer','router','specialist','merge']);
         const cleaned = llmAgents
           .filter((a) => a && a.label && a.agent && validRoles.has(a.role))

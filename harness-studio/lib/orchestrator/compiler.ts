@@ -265,6 +265,27 @@ function compileAider(name: string, pattern: PatternId, graph: LoopGraph): Compi
   return files;
 }
 
+// ---------- CodeBuddy: .codebuddy/rules/ + project_rules.md ----------
+function compileCodeBuddy(name: string, pattern: PatternId, graph: LoopGraph): CompileTarget['files'] {
+  const files: CompileTarget['files'] = [];
+  // 项目级规则文件
+  files.push({
+    path: '.codebuddy/project_rules.md',
+    content: `# ${name}\n\n## Multi-Agent Loop (${pattern})\n\nThis project uses a multi-agent loop orchestrated by Harness Studio.\nAgents should coordinate as follows:\n\n### Agents\n${graph.nodes.map((n) => `- **${n.label}** (${n.role}): ${n.description}`).join('\n')}\n\n### Coordination\n${graph.edges.map((e) => { const s = graph.nodes.find((n) => n.id === e.source); const t = graph.nodes.find((n) => n.id === e.target); return `- ${s?.label} → ${t?.label}${e.label ? ` (${e.label})` : ''}`; }).join('\n')}\n`,
+  });
+  // 每个 Agent 的独立规则文件，带 glob 匹配
+  for (const n of graph.nodes) {
+    const globs = roleGlobs(n.role, n.agent);
+    files.push({
+      path: `.codebuddy/rules/${n.agent}.md`,
+      content: `---\nname: ${n.label}\nrole: ${n.role}\nglobs: ${JSON.stringify(globs)}\n---\n\n# ${n.label}\n\n## Description\n${n.description}\n\n## Instructions\n${n.systemPrompt ?? `You are the ${n.label} agent. Role: ${n.role}. Focus on: ${n.description.toLowerCase()}. Produce output and signal hand-off to the next agent.`}\n`,
+    });
+  }
+  // 根目录 AGENTS.md 保持跨 IDE 兼容
+  files.push({ path: 'AGENTS.md', content: compileAgentsMd(name, pattern, graph) });
+  return files;
+}
+
 // ---------- Helpers ----------
 
 /**
@@ -336,6 +357,7 @@ const COMPILERS: Record<string, (name: string, p: PatternId, g: LoopGraph) => Co
   cline: compileCline,
   windsurf: compileWindsurf,
   aider: compileAider,
+  codebuddy: compileCodeBuddy,
 };
 
 export function compileLoop(
@@ -355,3 +377,98 @@ export function compileLoop(
 }
 
 export const ALL_PLATFORMS = Object.keys(COMPILERS);
+
+// ---------- Platform metadata for UI guidance ----------
+export interface PlatformInfo {
+  id: string;
+  label: string;
+  labelZh: string;
+  desc: string;
+  descZh: string;
+  category: 'ide' | 'cli' | 'standard';
+  outputHint: string;
+}
+
+export const PLATFORM_INFO: Record<string, PlatformInfo> = {
+  agents: {
+    id: 'agents',
+    label: 'AGENTS.md',
+    labelZh: 'AGENTS.md',
+    desc: 'Cross-IDE standard. A single markdown file any AI tool can read.',
+    descZh: '跨 IDE 通用标准。一个 Markdown 文件，所有 AI 工具均可读取。',
+    category: 'standard',
+    outputHint: 'AGENTS.md',
+  },
+  claude: {
+    id: 'claude',
+    label: 'Claude Code',
+    labelZh: 'Claude Code',
+    desc: 'Anthropic official CLI. Uses CLAUDE.md and per-agent subagents.',
+    descZh: 'Anthropic 官方 CLI 工具。生成 CLAUDE.md 和子代理配置。',
+    category: 'cli',
+    outputHint: 'CLAUDE.md + .claude/agents/',
+  },
+  cursor: {
+    id: 'cursor',
+    label: 'Cursor',
+    labelZh: 'Cursor',
+    desc: 'AI-first IDE. Generates .cursor/rules with glob-based file matching.',
+    descZh: 'AI 优先 IDE。生成 .cursor/rules，支持按文件类型匹配规则。',
+    category: 'ide',
+    outputHint: '.cursor/rules/*.mdc',
+  },
+  copilot: {
+    id: 'copilot',
+    label: 'GitHub Copilot',
+    labelZh: 'GitHub Copilot',
+    desc: 'GitHub coding assistant. Uses .github/copilot-instructions.md.',
+    descZh: 'GitHub 编程助手。生成 .github/copilot-instructions.md。',
+    category: 'ide',
+    outputHint: '.github/copilot-instructions.md',
+  },
+  trae: {
+    id: 'trae',
+    label: 'TRAE',
+    labelZh: 'TRAE',
+    desc: 'ByteDance AI IDE. Generates .trae/project_rules and skills.',
+    descZh: '字节跳动 AI IDE。生成 .trae/project_rules 和技能文件。',
+    category: 'ide',
+    outputHint: '.trae/project_rules.md + skills/',
+  },
+  cline: {
+    id: 'cline',
+    label: 'Cline / Roo Code',
+    labelZh: 'Cline / Roo Code',
+    desc: 'VS Code extension. Uses .clinerules and .roomodes.',
+    descZh: 'VS Code 插件。生成 .clinerules 和 .roomodes 配置。',
+    category: 'ide',
+    outputHint: '.clinerules/ + .roomodes',
+  },
+  windsurf: {
+    id: 'windsurf',
+    label: 'Windsurf',
+    labelZh: 'Windsurf',
+    desc: 'Codeium AI IDE. Uses .windsurf/rules with glob triggers.',
+    descZh: 'Codeium AI IDE。生成 .windsurf/rules，支持 glob 触发。',
+    category: 'ide',
+    outputHint: '.windsurf/rules/*.md',
+  },
+  aider: {
+    id: 'aider',
+    label: 'Aider',
+    labelZh: 'Aider',
+    desc: 'Terminal AI pair programmer. Uses .aider.conf.yml + CONVENTIONS.md.',
+    descZh: '终端 AI 结对编程工具。生成 .aider.conf.yml 和 CONVENTIONS.md。',
+    category: 'cli',
+    outputHint: '.aider.conf.yml + CONVENTIONS.md',
+  },
+  codebuddy: {
+    id: 'codebuddy',
+    label: 'CodeBuddy',
+    labelZh: 'CodeBuddy 腾讯云',
+    desc: 'Tencent Cloud AI assistant. Uses .codebuddy/rules with glob matching.',
+    descZh: '腾讯云 AI 编程助手。生成 .codebuddy/rules，支持 glob 匹配。',
+    category: 'ide',
+    outputHint: '.codebuddy/rules/*.md',
+  },
+};

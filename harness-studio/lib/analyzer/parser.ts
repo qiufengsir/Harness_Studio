@@ -109,11 +109,13 @@ export function parseFiles(files: { path: string; content: string }[]): {
 export function extractDependencies(files: ParsedFile[]): {
   languages: string[];
   frameworks: string[];
-  projectType: string | null;
+  projectType: string;
+  tools: string[];
 } {
   const languages = new Set<string>();
   const frameworks = new Set<string>();
-  let projectType: string | null = null;
+  const tools = new Set<string>();
+  let projectType: string = 'unknown';
 
   for (const f of files) {
     if (f.language) languages.add(f.language);
@@ -175,7 +177,7 @@ export function extractDependencies(files: ParsedFile[]): {
     if (/pydantic/i.test(c)) frameworks.add('Pydantic');
     if (/sqlalchemy/i.test(c)) frameworks.add('SQLAlchemy');
     if (/pytest/i.test(c)) frameworks.add('pytest');
-    if (!projectType) projectType = frameworks.has('Django') || frameworks.has('FastAPI') || frameworks.has('Flask') ? 'api-service' : null;
+    if (!projectType) projectType = frameworks.has('Django') || frameworks.has('FastAPI') || frameworks.has('Flask') ? 'api-service' : 'unknown';
   }
 
   // go.mod
@@ -204,5 +206,6 @@ export function extractDependencies(files: ParsedFile[]): {
     languages: Array.from(languages),
     frameworks: Array.from(frameworks),
     projectType,
+    tools: Array.from(tools),
   };
 }

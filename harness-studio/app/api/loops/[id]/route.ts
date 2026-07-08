@@ -24,6 +24,7 @@ export async function GET(
     ...row,
     graph: JSON.parse(row.graph),
     targets: JSON.parse(row.targets),
+    meta: row.meta ? JSON.parse(row.meta) : null,
   });
 }
 
@@ -42,6 +43,7 @@ export async function PUT(
   if (body.pattern !== undefined) updates.pattern = body.pattern;
   if (body.graph !== undefined) updates.graph = JSON.stringify(body.graph);
   if (body.targets !== undefined) updates.targets = JSON.stringify(body.targets);
+  if (body.meta !== undefined) updates.meta = body.meta ? JSON.stringify(body.meta) : null;
 
   db.update(loops).set(updates).where(eq(loops.id, id)).run();
 

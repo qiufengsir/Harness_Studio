@@ -12,7 +12,11 @@ import * as schema from './schema';
 let _db: ReturnType<typeof drizzle> | null = null;
 let _sqlite: Database.Database | null = null;
 
-const DB_PATH = path.resolve(process.cwd(), 'dev.db');
+// Railway: mount a volume at /data for persistent SQLite storage
+// Local dev: use ./dev.db in project root
+const DB_PATH = process.env.DATABASE_PATH
+  ? path.resolve(process.env.DATABASE_PATH)
+  : path.resolve(process.cwd(), 'dev.db');
 const MIGRATIONS_DIR = path.resolve(process.cwd(), 'lib', 'db', 'migrations');
 
 export function getDB() {
@@ -88,6 +92,7 @@ function bootstrapSchema(sqlite: Database.Database) {
       pattern TEXT NOT NULL,
       graph TEXT NOT NULL,
       targets TEXT NOT NULL,
+      meta TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -121,4 +126,16 @@ function bootstrapSchema(sqlite: Database.Database) {
       created_at INTEGER NOT NULL
     );
   `);
+
+  // ---- Lightweight column migrations for existing databases ----
+  // SQLite supports ADD COLUMN; introspect via pragma_table_info.
+  ensureColumn(sqlite, 'loops', 'meta', 'TEXT');
+}
+
+function ensureColumn(sqlite: Database.Database, table: string, column: string, type: string) {
+  const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) {
+    sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);
+    console.info(`[db] added column ${table}.${column}`);
+  }
 }
