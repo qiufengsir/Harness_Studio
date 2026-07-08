@@ -1,0 +1,35 @@
+# ============================================================
+# Harness Studio — Root Dockerignore
+# Build context: repository root
+# ============================================================
+
+# ---- Project-specific exclusions ----
+harness-studio/node_modules
+harness-studio/.next
+harness-studio/.env
+harness-studio/.env.local
+harness-studio/.env*.local
+harness-studio/dev.db
+harness-studio/dev.db-shm
+harness-studio/dev.db-wal
+harness-studio/*.db
+harness-studio/.trae
+
+# ---- Git ----
+.git
+.gitignore
+
+# ---- IDE ----
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+npm-debug.log*
