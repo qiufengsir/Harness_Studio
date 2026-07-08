@@ -1,6 +1,7 @@
 # ============================================================
 # Harness Studio — Docker image for Railway deployment
 # Uses full Debian for better native module compatibility
+# Build context: repository root (harness-studio/ is a subdirectory)
 # ============================================================
 
 FROM node:20 AS builder
@@ -14,10 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json* ./
+COPY harness-studio/package.json harness-studio/package-lock.json* ./
 RUN npm ci
 
-COPY . .
+COPY harness-studio/. .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
