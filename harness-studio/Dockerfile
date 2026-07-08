@@ -1,6 +1,5 @@
 # ============================================================
 # Harness Studio — Docker image for Railway deployment
-# Uses Next.js standalone output mode (recommended for Docker)
 # Build context: repository root (harness-studio/ is a subdirectory)
 # ============================================================
 
@@ -24,7 +23,7 @@ RUN npm run build
 
 RUN npm rebuild better-sqlite3
 
-# Ensure public directory exists for runner COPY
+# Ensure public directory exists
 RUN mkdir -p /app/public
 
 # ---- Runner ----
@@ -38,25 +37,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV DATABASE_PATH=/data/dev.db
 
-RUN mkdir -p /data /app/public
+RUN mkdir -p /data
 
-# Standalone server (includes minimal node_modules bundled by Next.js)
-COPY --from=builder /app/.next/standalone ./
-# Static assets
-COPY --from=builder /app/.next/static ./.next/static
-# Public directory (empty but expected by Next.js)
+# Copy all necessary files
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json* ./
+COPY --from=builder /app/next.config.mjs ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-
-# better-sqlite3 is in serverExternalPackages, so NOT bundled in standalone.
-# Copy the native module and its dependency chain.
-COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
-COPY --from=builder /app/node_modules/bindings ./node_modules/bindings
-COPY --from=builder /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Railway injects PORT env var — use it explicitly
+CMD ["sh", "-c", "npx next start --port ${PORT:-3000} --hostname 0.0.0.0"]
