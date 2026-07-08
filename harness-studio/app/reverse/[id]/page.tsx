@@ -3,7 +3,7 @@
 // ============================================================
 import { getDB } from '@/lib/db/client';
 import { codeAnalysis, recommendations, projects } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq } from '@/lib/db/query-helpers';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AlertTriangle, AlertCircle, Info, CheckCircle2, ArrowRight, FileCode, Workflow } from 'lucide-react';

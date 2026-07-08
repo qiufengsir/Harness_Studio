@@ -1,0 +1,10 @@
+{
+  "build": {
+    "dockerfilePath": "Dockerfile"
+  },
+  "env": {
+    "DATABASE_PATH": "/data/dev.db",
+    "HOSTNAME": "0.0.0.0",
+    "PORT": "3000"
+  }
+}

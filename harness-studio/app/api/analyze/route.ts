@@ -10,7 +10,7 @@ import { parseFiles, extractDependencies } from '@/lib/analyzer/parser';
 import { runAllDetectors } from '@/lib/analyzer/detector';
 import { recommendFromIssues, maybeAddPipelineLoop } from '@/lib/analyzer/recommender';
 import { decodeFiles } from '@/lib/analyzer/file-decoder';
-import { randomUUID } from 'node:crypto';
+import { uuid } from '@/lib/utils/uuid';
 import { checkRateLimit, getClientIP } from '@/lib/middleware/rate-limit';
 
 export const runtime = 'nodejs';
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
 
     const db = getDB();
     const now = Date.now();
-    const projectId = randomUUID();
-    const analysisId = randomUUID();
+    const projectId = uuid();
+    const analysisId = uuid();
 
     // 1. Create project
     db.insert(projects).values({
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     // 6. Persist recommendations
     for (const rec of recs) {
       db.insert(recommendations).values({
-        id: randomUUID(),
+        id: uuid(),
         analysisId,
         kind: rec.kind,
         name: rec.name,

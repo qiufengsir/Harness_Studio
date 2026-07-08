@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
 import { loops } from '@/lib/db/schema';
-import { randomUUID } from 'node:crypto';
+import { uuid } from '@/lib/utils/uuid';
 import { PatternId, PATTERN_LIST, getPattern } from '@/lib/orchestrator/patterns';
 import { compileLoop, LoopGraph } from '@/lib/orchestrator/compiler';
 import { validateLoop } from '@/lib/orchestrator/validator';
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const id = randomUUID();
+  const id = uuid();
   const now = Date.now();
   db.insert(loops).values({
     id,

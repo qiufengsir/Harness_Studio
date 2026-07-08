@@ -5,8 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
 import { codeSamples, metricEvents, scoreHistory, projects } from '@/lib/db/schema';
 import { scoreCode, scoreCodeBatch } from '@/lib/metrics/scorer';
-import { randomUUID } from 'node:crypto';
-import { eq, desc } from 'drizzle-orm';
+import { uuid } from '@/lib/utils/uuid';
+import { eq, desc } from '@/lib/db/query-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'filePath and content required' }, { status: 400 });
   }
 
-  const sampleId = randomUUID();
+  const sampleId = uuid();
   const now = Date.now();
 
   // 1. Save sample
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
   // 3. Save events
   for (const ev of result.events) {
     db.insert(metricEvents).values({
-      id: randomUUID(),
+      id: uuid(),
       sampleId,
       rule: ev.rule,
       passed: ev.passed,
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
   // 4. Save score history (per-project)
   db.insert(scoreHistory).values({
-    id: randomUUID(),
+    id: uuid(),
     projectId: projectId ?? null,
     styleScore: result.style,
     securityScore: result.security,
@@ -159,7 +159,7 @@ export async function PUT(req: NextRequest) {
 
   // Save each file as a sample + events
   for (const f of batchResult.files) {
-    const sampleId = randomUUID();
+    const sampleId = uuid();
     db.insert(codeSamples).values({
       id: sampleId,
       projectId: projectId ?? null,
@@ -172,7 +172,7 @@ export async function PUT(req: NextRequest) {
 
     for (const ev of f.result.events) {
       db.insert(metricEvents).values({
-        id: randomUUID(),
+        id: uuid(),
         sampleId,
         rule: ev.rule,
         passed: ev.passed,
@@ -185,7 +185,7 @@ export async function PUT(req: NextRequest) {
 
   // Save aggregated score history
   db.insert(scoreHistory).values({
-    id: randomUUID(),
+    id: uuid(),
     projectId: projectId ?? null,
     styleScore: batchResult.style,
     securityScore: batchResult.security,

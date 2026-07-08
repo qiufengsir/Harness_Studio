@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
 import { loops } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq } from '@/lib/db/query-helpers';
 import { compileLoop, LoopGraph } from '@/lib/orchestrator/compiler';
 import { validateLoop } from '@/lib/orchestrator/validator';
 import { PatternId } from '@/lib/orchestrator/patterns';

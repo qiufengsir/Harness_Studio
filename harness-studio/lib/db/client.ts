@@ -1,34 +1,48 @@
 // ============================================================
-// DB Client — singleton better-sqlite3 + drizzle
-// Auto-migrates on first run (zero-config local dev)
+// DB Client — dual mode: better-sqlite3 (local/Railway) or
+// in-memory (Cloudflare Pages where native modules are unavailable)
 // ============================================================
-import Database from 'better-sqlite3';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import path from 'node:path';
-import fs from 'node:fs';
-import * as schema from './schema';
 
-let _db: ReturnType<typeof drizzle> | null = null;
-let _sqlite: Database.Database | null = null;
+let _db: any = null;
+let _memoryMode = false;
 
-// Railway: mount a volume at /data for persistent SQLite storage
-// Local dev: use ./dev.db in project root
-const DB_PATH = process.env.DATABASE_PATH
-  ? path.resolve(process.env.DATABASE_PATH)
-  : path.resolve(process.cwd(), 'dev.db');
-const MIGRATIONS_DIR = path.resolve(process.cwd(), 'lib', 'db', 'migrations');
+// Detect if better-sqlite3 is available
+try {
+  require('better-sqlite3');
+} catch {
+  _memoryMode = true;
+  console.info('[db] better-sqlite3 not available, using in-memory database');
+}
 
 export function getDB() {
   if (_db) return _db;
 
-  _sqlite = new Database(DB_PATH);
+  if (_memoryMode) {
+    // Use in-memory database for Cloudflare Pages
+    const { getMemoryDB } = require('./memory-client');
+    _db = getMemoryDB();
+    return _db;
+  }
+
+  // Use better-sqlite3 + Drizzle ORM for local dev / Railway
+  const Database = require('better-sqlite3');
+  const { drizzle } = require('drizzle-orm/better-sqlite3');
+  const { migrate } = require('drizzle-orm/better-sqlite3/migrator');
+  const path = require('node:path');
+  const fs = require('node:fs');
+  const schema = require('./schema');
+
+  const DB_PATH = process.env.DATABASE_PATH
+    ? path.resolve(process.env.DATABASE_PATH)
+    : path.resolve(process.cwd(), 'dev.db');
+  const MIGRATIONS_DIR = path.resolve(process.cwd(), 'lib', 'db', 'migrations');
+
+  const _sqlite = new Database(DB_PATH);
   _sqlite.pragma('journal_mode = WAL');
   _sqlite.pragma('foreign_keys = ON');
 
   _db = drizzle(_sqlite, { schema });
 
-  // Auto-create tables if migrations folder doesn't exist yet
   if (!fs.existsSync(MIGRATIONS_DIR)) {
     bootstrapSchema(_sqlite);
   } else {
@@ -44,15 +58,11 @@ export function getDB() {
 }
 
 export function closeDB() {
-  if (_sqlite) {
-    _sqlite.close();
-    _sqlite = null;
-    _db = null;
-  }
+  // No-op for in-memory mode
 }
 
 // Fallback DDL — ensures the app runs even before `drizzle-kit push`
-function bootstrapSchema(sqlite: Database.Database) {
+function bootstrapSchema(sqlite: any) {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
@@ -127,12 +137,10 @@ function bootstrapSchema(sqlite: Database.Database) {
     );
   `);
 
-  // ---- Lightweight column migrations for existing databases ----
-  // SQLite supports ADD COLUMN; introspect via pragma_table_info.
   ensureColumn(sqlite, 'loops', 'meta', 'TEXT');
 }
 
-function ensureColumn(sqlite: Database.Database, table: string, column: string, type: string) {
+function ensureColumn(sqlite: any, table: string, column: string, type: string) {
   const cols = sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
   if (!cols.some((c) => c.name === column)) {
     sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type};`);

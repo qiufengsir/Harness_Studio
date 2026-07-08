@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
 import { codeAnalysis, recommendations, projects } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq } from '@/lib/db/query-helpers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
