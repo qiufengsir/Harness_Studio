@@ -46,7 +46,7 @@
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.0.0",
     "drizzle-kit": "^0.28.1",
-    "wrangler": "^3.91.0"
+    "wrangler": "^4.86.0"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.11.1"
