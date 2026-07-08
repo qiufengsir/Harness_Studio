@@ -5,21 +5,9 @@
     "dockerfilePath": "harness-studio/Dockerfile"
   },
   "deploy": {
-    "startCommand": "npm start",
     "healthcheckPath": "/",
-    "healthcheckTimeout": 60,
+    "healthcheckTimeout": 120,
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3,
-    "memory": "512",
-    "cpu": "1"
-  },
-  "environments": {
-    "production": {
-      "variables": {
-        "DATABASE_PATH": "/data/dev.db",
-        "HOSTNAME": "0.0.0.0",
-        "PORT": "3000"
-      }
-    }
+    "restartPolicyMaxRetries": 3
   }
 }

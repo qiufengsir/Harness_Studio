@@ -1,6 +1,6 @@
 # ============================================================
 # Harness Studio — Docker image for Railway deployment
-# Uses full Debian for better native module compatibility
+# Uses Next.js standalone output mode (recommended for Docker)
 # Build context: repository root (harness-studio/ is a subdirectory)
 # ============================================================
 
@@ -24,35 +24,39 @@ RUN npm run build
 
 RUN npm rebuild better-sqlite3
 
-# Ensure public directory exists (Next.js expects it at runtime)
+# Ensure public directory exists for runner COPY
 RUN mkdir -p /app/public
 
+# ---- Runner ----
 FROM node:20 AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     libstdc++6 \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV DATABASE_PATH=/data/dev.db
 
-RUN mkdir -p /data
+RUN mkdir -p /data /app/public
 
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/package-lock.json* ./
-COPY --from=builder /app/next.config.mjs ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
+# Standalone server (includes minimal node_modules bundled by Next.js)
+COPY --from=builder /app/.next/standalone ./
+# Static assets
+COPY --from=builder /app/.next/static ./.next/static
+# Public directory (empty but expected by Next.js)
 COPY --from=builder /app/public ./public
+
+# better-sqlite3 is in serverExternalPackages, so NOT bundled in standalone.
+# Copy the native module and its dependency chain.
+COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+COPY --from=builder /app/node_modules/bindings ./node_modules/bindings
+COPY --from=builder /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
-    CMD curl -f http://localhost:3000/api/llm-test || exit 1
-
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
