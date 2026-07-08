@@ -24,12 +24,16 @@ RUN npm run build
 
 RUN npm rebuild better-sqlite3
 
+# Ensure public directory exists (Next.js expects it at runtime)
+RUN mkdir -p /app/public
+
 FROM node:20 AS runner
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsqlite3-0 \
     libstdc++6 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
@@ -41,6 +45,7 @@ RUN mkdir -p /data
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json* ./
+COPY --from=builder /app/next.config.mjs ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
