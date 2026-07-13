@@ -9,11 +9,12 @@ import { Bot, Sparkles, Check, X, AlertTriangle, Clock, RefreshCw, ArrowRight } 
 import { Card, CardSection, Button, Chip } from '@/components/ui';
 import { useI18n } from '@/components/i18n/I18nProvider';
 
+// API 返回的对比结果类型
 interface ChatMessage {
   without: string;
   with: string;
-  withScore?: number;
-  withoutScore?: number;
+  withScore: number;
+  withoutScore: number;
 }
 
 const PRESET_QUESTIONS = [
@@ -23,168 +24,6 @@ const PRESET_QUESTIONS = [
   { q: 'Help me refactor this legacy JavaScript to TypeScript', cat: 'refactor' },
 ];
 
-const DEMO_RESPONSES: Record<string, ChatMessage> = {
-  'Write a React component for a user profile card': {
-    without: `function UserProfile({ user }) {
-  return (
-    <div>
-      <h2>{user.name}</h2>
-      <p>{user.email}</p>
-      <img src={user.avatar} />
-    </div>
-  );
-}`,
-    with: `interface User {
-  name: string;
-  email: string;
-  avatar?: string;
-  role: 'admin' | 'user' | 'viewer';
-}
-
-interface UserProfileProps {
-  user: User;
-  showRole?: boolean;
-}
-
-export function UserProfile({ user, showRole = true }: UserProfileProps) {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-semibold text-lg">
-          {user.name.charAt(0)}
-        </div>
-        <div className="flex-1">
-          <h2 className="text-lg font-semibold text-gray-900">{user.name}</h2>
-          <p className="text-sm text-gray-500">{user.email}</p>
-          {showRole && (
-            <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-              {user.role}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}`,
-    withScore: 92,
-    withoutScore: 45,
-  },
-  'How should I implement rate limiting for this API endpoint?': {
-    without: `function rateLimit(req, res, next) {
-  if (req.count > 100) {
-    res.status(429).send('Too many requests');
-  }
-  next();
-}`,
-    with: `import { createRateLimiter } from '@/lib/rate-limiter';
-
-const limiter = createRateLimiter({
-  max: 100,
-  windowMs: 60000,
-  standardHeaders: true,
-});
-
-export async function rateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
-  const { success, remaining, resetTime } = await limiter.consume(req.ip);
-  
-  if (!success) {
-    res.setHeader('Retry-After', Math.ceil((resetTime - Date.now()) / 1000));
-    return res.status(429).json({
-      error: 'Rate limit exceeded',
-      remaining: 0,
-      retryAfter: Math.ceil((resetTime - Date.now()) / 1000),
-    });
-  }
-  
-  res.setHeader('X-RateLimit-Remaining', remaining);
-  res.setHeader('X-RateLimit-Reset', Math.ceil(resetTime / 1000));
-  next();
-}
-
-// Security note: Use Redis-backed store for distributed environments`,
-    withScore: 88,
-    withoutScore: 25,
-  },
-  'Find security vulnerabilities in this authentication code': {
-    without: 'The code looks fine to me.',
-    with: `## Security Vulnerabilities Found
-
-### Critical: SQL Injection
-\`\`\`javascript
-const query = \`SELECT * FROM users WHERE email = '\${email}'\`;
-\`\`\`
-**Fix:** Use parameterized queries or ORM.
-
-### High: Plaintext Password Storage
-\`\`\`javascript
-user.password = password;
-\`\`\`
-**Fix:** Use bcrypt with 12+ rounds: \`await bcrypt.hash(password, 12)\`
-
-### Medium: Missing Rate Limiting
-No protection against brute force attacks.
-**Fix:** Add rate limiting middleware.
-
-### Low: No Session Expiry
-Refresh token never expires.
-**Fix:** Implement refresh token rotation.
-
----
-**Recommended fix implemented according to your team's security standards.**`,
-    withScore: 95,
-    withoutScore: 10,
-  },
-  'Help me refactor this legacy JavaScript to TypeScript': {
-    without: `interface Config {
-  url: string;
-}
-
-function fetchData(config) {
-  return fetch(config.url);
-}`,
-    with: `interface ApiConfig {
-  baseUrl: string;
-  timeout?: number;
-  headers?: Record<string, string>;
-}
-
-type ApiResponse<T> = {
-  data: T;
-  status: number;
-} | {
-  error: string;
-  status: number;
-};
-
-export async function fetchData<T>(
-  config: ApiConfig,
-  endpoint: string
-): Promise<ApiResponse<T>> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), config.timeout ?? 30000);
-  
-  try {
-    const response = await fetch(\`\${config.baseUrl}\${endpoint}\`, {
-      signal: controller.signal,
-      headers: config.headers,
-    });
-    
-    if (!response.ok) {
-      return { error: response.statusText, status: response.status };
-    }
-    
-    return { data: await response.json(), status: response.status };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Unknown error', status: 500 };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}`,
-    withScore: 90,
-    withoutScore: 35,
-  },
-};
-
 export default function DemoPage() {
   const { t, lang } = useI18n();
   const [question, setQuestion] = useState(PRESET_QUESTIONS[0].q);
@@ -193,31 +32,56 @@ export default function DemoPage() {
   const [loading, setLoading] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [activeTab, setActiveTab] = useState<'compare' | 'before' | 'after'>('compare');
+  // API 返回的对比结果与错误信息
+  const [response, setResponse] = useState<ChatMessage | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAsk = async () => {
     const q = customQuestion.trim() || question;
     if (!q) return;
-    
+
     setLoading(true);
     setShowResult(false);
+    setResponse(null);
+    setError(null);
     setElapsed(0);
-    
+
+    // 计时器：显示思考时长
     const start = Date.now();
     const timer = setInterval(() => {
       setElapsed(Math.floor((Date.now() - start) / 1000));
     }, 500);
-    
-    // Simulate API delay
-    await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
-    
-    clearInterval(timer);
-    setLoading(false);
-    setShowResult(true);
-    setQuestion(q);
-    setCustomQuestion('');
-  };
 
-  const response = DEMO_RESPONSES[question];
+    try {
+      // 调用后端 LLM 对比接口（无配置 vs 有 Harness 配置）
+      const res = await fetch('/api/demo-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      });
+      const data = await res.json();
+
+      if (!data.ok) {
+        // LLM 未配置或调用失败
+        setError(data.error || 'LLM 调用失败，请稍后重试。');
+      } else {
+        setResponse({
+          without: data.without,
+          with: data.with,
+          withoutScore: data.withoutScore,
+          withScore: data.withScore,
+        });
+        setShowResult(true);
+        setQuestion(q);
+        setCustomQuestion('');
+      }
+    } catch (e) {
+      setError((e as Error).message || '网络错误，请检查连接后重试。');
+    } finally {
+      clearInterval(timer);
+      setLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -266,7 +130,7 @@ export default function DemoPage() {
             {PRESET_QUESTIONS.map((pq) => (
               <button
                 key={pq.q}
-                onClick={() => { setQuestion(pq.q); setShowResult(false); }}
+                onClick={() => { setQuestion(pq.q); setShowResult(false); setResponse(null); setError(null); }}
                 className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
                   question === pq.q 
                     ? 'border-black bg-black text-white' 
@@ -307,6 +171,33 @@ export default function DemoPage() {
           )}
         </CardSection>
       </Card>
+
+      {/* 错误提示（LLM 未配置或调用失败时显示） */}
+      {error && !loading && (
+        <Card className="mb-6 border-bad">
+          <CardSection className="py-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-bad/10 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={14} className="text-bad" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-bad">
+                  {lang === 'zh' ? 'LLM 调用失败' : 'LLM Call Failed'}
+                </h3>
+                <p className="text-xs text-ink2 mt-1 break-words">{error}</p>
+                <Button
+                  variant="ghost"
+                  icon={ArrowRight}
+                  onClick={() => window.location.href = '/settings'}
+                  className="mt-3"
+                >
+                  {lang === 'zh' ? '前往设置页配置密钥' : 'Go to Settings'}
+                </Button>
+              </div>
+            </div>
+          </CardSection>
+        </Card>
+      )}
 
       {/* Result Section */}
       {showResult && response && (
@@ -462,7 +353,7 @@ export default function DemoPage() {
       )}
 
       {/* Why this matters */}
-      {!showResult && (
+      {!showResult && !error && (
         <Card className="mb-6">
           <CardSection>
             <h3 className="text-sm font-semibold text-ink mb-3">{t('demo.why.title')}</h3>

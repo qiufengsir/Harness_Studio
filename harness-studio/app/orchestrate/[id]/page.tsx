@@ -12,7 +12,7 @@ import ReactFlow, {
   Handle, Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, Bot, RefreshCw, Sparkles, FileCode, Clock } from 'lucide-react';
+import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, Bot, RefreshCw, Sparkles, FileCode, Clock, ArrowRight } from 'lucide-react';
 import { Card, CardSection, Button, Chip, PageHeader } from '@/components/ui';
 import { LoopGraph, LoopNodeData, CompileTarget } from '@/lib/orchestrator/compiler';
 import { ALL_PLATFORMS, PLATFORM_INFO } from '@/lib/orchestrator/compiler';
@@ -67,6 +67,7 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
   const [chatQuestion, setChatQuestion] = useState('');
   const [chatResult, setChatResult] = useState<{ without: string; with: string; withoutScore: number; withScore: number } | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
 
   // Load
   useEffect(() => {
@@ -234,66 +235,53 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  // Chat simulation — show what AI would answer with/without configs
+  // Chat 对比演示 — 调用后端 LLM 接口，展示有无 Harness 配置的回答差异
   const simulateChat = async () => {
     const q = chatQuestion.trim();
     if (!q) return;
 
     setChatLoading(true);
     setChatResult(null);
+    setChatError(null);
 
-    await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+    try {
+      // 从当前 loop 的 agent 配置构建上下文字符串
+      const pattern = loop?.pattern || 'pipeline';
+      const agentCount = nodes.length;
+      const agentRoles = nodes
+        .map((n) => `  - ${n.data.label} (${n.data.agent}): ${n.data.description}`)
+        .join('\n');
 
-    const pattern = loop?.pattern || 'pipeline';
-    const agentCount = nodes.length;
+      const configContext = `You are part of a development team using Harness Studio with the following configuration:
+- Pattern: ${pattern}
+- Agents: ${agentCount}
+- Agent roles:
+${agentRoles}
+Follow the team conventions defined by these agents.`;
 
-    const withoutScore = Math.floor(30 + Math.random() * 25);
-    const withScore = Math.floor(75 + Math.random() * 20);
+      // 调用后端 LLM 对比接口（无配置 vs 有 Harness 配置）
+      const res = await fetch('/api/demo-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, configContext }),
+      });
+      const data = await res.json();
 
-    const baseWithout = `function handleRequest(req) {
-  // Generic implementation
-  return { status: 'ok' };
-}`;
-
-    const baseWith = `interface Request {
-  body: any;
-  headers: Record<string, string>;
-}
-
-interface Response {
-  status: number;
-  data?: any;
-  error?: string;
-}
-
-export async function handleRequest(req: Request): Promise<Response> {
-  try {
-    const { body, headers } = req;
-    
-    if (!body) {
-      return { status: 400, error: 'Body is required' };
+      if (!data.ok) {
+        setChatError(data.error || 'LLM 调用失败，请稍后重试。');
+      } else {
+        setChatResult({
+          without: data.without,
+          with: data.with,
+          withoutScore: data.withoutScore,
+          withScore: data.withScore,
+        });
+      }
+    } catch (e) {
+      setChatError((e as Error).message || '网络错误，请检查连接后重试。');
+    } finally {
+      setChatLoading(false);
     }
-    
-    // Validated logic following your team standards
-    // Pattern: ${pattern} · ${agentCount} agents
-    const result = await processRequest(body);
-    
-    return { status: 200, data: result };
-  } catch (error) {
-    return { 
-      status: 500, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    };
-  }
-}`;
-
-    setChatResult({
-      without: baseWithout,
-      with: baseWith,
-      withoutScore,
-      withScore,
-    });
-    setChatLoading(false);
   };
 
   // React Flow handlers
@@ -974,8 +962,35 @@ export async function handleRequest(req: Request): Promise<Response> {
                     </div>
                   )}
 
+                  {/* 错误提示（LLM 未配置或调用失败时显示） */}
+                  {chatError && !chatLoading && (
+                    <div className="flex-1 flex items-center justify-center p-6">
+                      <div className="max-w-md w-full">
+                        <div className="flex items-start gap-3 p-4 rounded-lg border border-bad/30 bg-bad/5">
+                          <div className="w-8 h-8 rounded-lg bg-bad/10 flex items-center justify-center flex-shrink-0">
+                            <AlertTriangle size={14} className="text-bad" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-bad">
+                              {lang === 'zh' ? 'LLM 调用失败' : 'LLM Call Failed'}
+                            </h3>
+                            <p className="text-xs text-ink2 mt-1 break-words">{chatError}</p>
+                            <Button
+                              variant="ghost"
+                              icon={ArrowRight}
+                              onClick={() => window.location.href = '/settings'}
+                              className="mt-3"
+                            >
+                              {lang === 'zh' ? '前往设置页配置密钥' : 'Go to Settings'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Empty state */}
-                  {!chatResult && (
+                  {!chatResult && !chatError && (
                     <div className="flex-1 flex items-center justify-center">
                       <div className="text-center">
                         <Sparkles size={24} className="text-ink3 mx-auto mb-3" />

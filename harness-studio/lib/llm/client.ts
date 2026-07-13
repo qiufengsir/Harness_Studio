@@ -30,6 +30,8 @@ export interface ProviderMeta {
   models: string[];        // selectable models
   region: 'CN' | 'GLOBAL';
   docUrl: string;
+  defaultAvailable: boolean; // 平台是否提供默认密钥（服务端 env）
+  fixedTemperature?: number; // 某些供应商（如 Kimi Code）要求固定 temperature
 }
 
 /** Static registry — drives Settings UI + client init */
@@ -47,72 +49,82 @@ export const PROVIDERS: Record<Provider, ProviderMeta> = {
     models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
     region: 'CN',
     docUrl: 'https://api-docs.deepseek.com/',
+    defaultAvailable: true,
   },
   moonshot: {
     id: 'moonshot',
-    label: 'Moonshot / Kimi',
+    label: 'Kimi Code',
     protocol: 'openai',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    defaultModel: 'moonshot-v1-32k',
+    // sk-kimi- 前缀的密钥使用 Kimi Code API 端点
+    baseUrl: 'https://api.kimi.com/coding/v1',
+    defaultModel: 'kimi-for-coding',
     envKey: 'MOONSHOT_API_KEY',
-    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0905-preview'],
+    models: ['kimi-for-coding', 'kimi-for-coding-highspeed'],
     region: 'CN',
-    docUrl: 'https://platform.moonshot.cn/docs',
+    docUrl: 'https://platform.kimi.com/docs',
+    defaultAvailable: false,
+    // Kimi Code API 要求 temperature=1
+    fixedTemperature: 1,
   },
   qwen: {
     id: 'qwen',
     label: 'Qwen / 通义千问',
     protocol: 'openai',
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    defaultModel: 'qwen-plus',
+    defaultModel: 'qwen3.6-flash',
     envKey: 'DASHSCOPE_API_KEY',
-    models: ['qwen-turbo', 'qwen-plus', 'qwen-max', 'qwen2.5-coder-32b-instruct'],
+    models: ['qwen3.7-max', 'qwen3.7-plus', 'qwen3.6-flash', 'qwen3-max-thinking', 'qwen-plus'],
     region: 'CN',
     docUrl: 'https://help.aliyun.com/zh/dashscope/',
+    defaultAvailable: false,
   },
   zhipu: {
     id: 'zhipu',
     label: 'Zhipu / 智谱 GLM',
     protocol: 'openai',
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    defaultModel: 'glm-4-plus',
+    defaultModel: 'glm-4-flash',
     envKey: 'ZHIPU_API_KEY',
-    models: ['glm-4-plus', 'glm-4-air', 'glm-4-flash', 'glm-4.5'],
+    models: ['glm-5', 'glm-5.1', 'glm-4.7', 'glm-4.6', 'glm-4-flash'],
     region: 'CN',
     docUrl: 'https://open.bigmodel.cn/dev/api',
+    defaultAvailable: false,
   },
   openai: {
     id: 'openai',
     label: 'OpenAI',
     protocol: 'openai',
     baseUrl: 'https://api.openai.com/v1',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: 'gpt-5.2',
     envKey: 'OPENAI_API_KEY',
-    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1', 'gpt-4.1-mini', 'o4-mini'],
+    models: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2', 'gpt-4.1', 'gpt-4o-mini'],
     region: 'GLOBAL',
     docUrl: 'https://platform.openai.com/docs',
+    defaultAvailable: false,
   },
   anthropic: {
     id: 'anthropic',
     label: 'Anthropic Claude',
     protocol: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    defaultModel: 'claude-3-5-haiku-latest',
+    defaultModel: 'claude-sonnet-5',
     envKey: 'ANTHROPIC_API_KEY',
-    models: ['claude-3-5-haiku-latest', 'claude-3-5-sonnet-latest', 'claude-sonnet-4-5', 'claude-opus-4-1'],
+    models: ['claude-sonnet-5', 'claude-opus-4.8', 'claude-sonnet-4.6', 'claude-haiku-4.5'],
     region: 'GLOBAL',
     docUrl: 'https://docs.anthropic.com/',
+    defaultAvailable: false,
   },
   groq: {
     id: 'groq',
     label: 'Groq',
     protocol: 'openai',
     baseUrl: 'https://api.groq.com/openai/v1',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'llama-4-scout-17b-16e-instruct',
     envKey: 'GROQ_API_KEY',
-    models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
+    models: ['llama-4-maverick-17b-128e-instruct', 'llama-4-scout-17b-16e-instruct', 'llama-3.3-70b-versatile', 'mixtral-8x7b-32768'],
     region: 'GLOBAL',
     docUrl: 'https://console.groq.com/docs',
+    defaultAvailable: false,
   },
 };
 
@@ -215,7 +227,8 @@ export async function llmGenerate(opts: GenerateOptions): Promise<string> {
     model: opts.config?.model ?? meta.defaultModel,
     apiKey: opts.config?.apiKey,
     baseUrl: opts.config?.baseUrl,
-    temperature: opts.config?.temperature ?? 0.7,
+    // 某些供应商（如 Kimi Code）要求固定 temperature
+    temperature: meta.fixedTemperature ?? opts.config?.temperature ?? 0.7,
     maxTokens: opts.config?.maxTokens ?? 2000,
   };
 
@@ -292,10 +305,14 @@ export async function llmGenerateJSON<T = unknown>(opts: GenerateOptions): Promi
   }
 }
 
-/** Quick check whether a provider is configured (has key in env) */
-export function isProviderAvailable(provider: Provider): boolean {
+/**
+ * Quick check whether a provider is configured.
+ * 有自定义密钥时也算可用（customKey 非空字符串即视为有效）。
+ */
+export function isProviderAvailable(provider: Provider, customKey?: string): boolean {
   const meta = PROVIDERS[provider];
-  return !!meta && !!process.env[meta.envKey];
+  if (!meta) return false;
+  return !!process.env[meta.envKey] || (typeof customKey === 'string' && customKey.trim().length > 0);
 }
 
 /** List of providers that have an API key configured in env */
@@ -303,8 +320,11 @@ export function availableProviders(): Provider[] {
   return PROVIDER_LIST.filter((p) => isProviderAvailable(p.id)).map((p) => p.id);
 }
 
-/** Status report for Settings page */
-export function providerStatus(): Array<{
+/**
+ * Status report for Settings page.
+ * customKeys 用于把用户在浏览器中保存的自定义密钥一并计入 configured 判断。
+ */
+export function providerStatus(customKeys?: Partial<Record<Provider, string>>): Array<{
   provider: Provider;
   label: string;
   region: 'CN' | 'GLOBAL';
@@ -312,6 +332,7 @@ export function providerStatus(): Array<{
   models: string[];
   docUrl: string;
   configured: boolean;
+  defaultAvailable: boolean;
 }> {
   return PROVIDER_LIST.map((p) => ({
     provider: p.id,
@@ -320,6 +341,7 @@ export function providerStatus(): Array<{
     defaultModel: p.defaultModel,
     models: p.models,
     docUrl: p.docUrl,
-    configured: isProviderAvailable(p.id),
+    defaultAvailable: p.defaultAvailable,
+    configured: isProviderAvailable(p.id, customKeys?.[p.id]),
   }));
 }

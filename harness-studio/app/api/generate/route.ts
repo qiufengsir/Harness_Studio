@@ -12,7 +12,7 @@ import { buildProjectContext, type ProjectContext } from '@/lib/llm/context-pars
 import { llmGenerateJSON, isProviderAvailable, PROVIDERS, type Provider } from '@/lib/llm/client';
 import { buildAgentGenPrompt, metaSystemPrompt } from '@/lib/llm/prompts';
 import { getIndustry } from '@/lib/orchestrator/industry';
-import { resolveProvider, getLLMPrefs } from '@/lib/llm/prefs';
+import { resolveProvider, getLLMPrefs, getCustomApiKey } from '@/lib/llm/prefs';
 import { checkRateLimit, getClientIP } from '@/lib/middleware/rate-limit';
 
 export const runtime = 'nodejs';
@@ -90,7 +90,9 @@ export async function POST(req: NextRequest) {
     const resolved = await resolveProvider();
     const provider: Provider = body.provider ?? resolved.provider;
     const model: string | undefined = body.model ?? resolved.model ?? undefined;
-    const llmReady = useLLM && (isProviderAvailable(provider) || !!body.apiKey);
+    // 读取用户自定义密钥（Cookie），优先使用 body 中的显式覆盖
+    const customKey = body.apiKey ?? (await getCustomApiKey(provider)) ?? undefined;
+    const llmReady = useLLM && (isProviderAvailable(provider, customKey) || !!customKey);
 
     if (llmReady && agents.length > 0) {
       try {
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
           config: {
             provider,
             model,
-            apiKey: body.apiKey,
+            apiKey: customKey,
             temperature: 0.7,
             maxTokens: 4000,
           },

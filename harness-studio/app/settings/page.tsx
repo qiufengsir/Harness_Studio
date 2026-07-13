@@ -1,23 +1,35 @@
 // ============================================================
 // Settings — runtime config (i18n via cookie)
 // Server component renders current state, client component handles
-// provider selection / model override / connection test
+// provider selection / model override / connection test / 密钥模式切换
 // ============================================================
 import { Card, CardSection, PageHeader, Chip } from '@/components/ui';
-import { Boxes, Database, KeyRound } from 'lucide-react';
+import { Boxes, Database, KeyRound, CheckCircle2 } from 'lucide-react';
 import { ALL_PLATFORMS } from '@/lib/orchestrator/compiler';
 import { getServerLang, tFor } from '@/lib/i18n/server';
-import { providerStatus } from '@/lib/llm/client';
-import { getLLMPrefs } from '@/lib/llm/prefs';
+import { providerStatus, PROVIDERS, type Provider } from '@/lib/llm/client';
+import { getLLMPrefs, getAllCustomKeys } from '@/lib/llm/prefs';
 import { ProviderConfig } from './ProviderConfig';
 
 export default async function SettingsPage() {
   const lang = await getServerLang();
   const t = (k: string) => tFor(lang, k);
 
-  const providers = providerStatus();
-  const { provider: currentProvider, model: currentModel } = await getLLMPrefs();
+  // 读取自定义密钥（用于 providerStatus 判断 + hasCustomKey 映射）
+  const customKeys = await getAllCustomKeys();
+  const providers = providerStatus(customKeys).map((p) => ({
+    ...p,
+    hasEnvKey: !!process.env[PROVIDERS[p.provider].envKey],
+  }));
+  const { provider: currentProvider, model: currentModel, keyMode } = await getLLMPrefs();
   const configuredCount = providers.filter((p) => p.configured).length;
+
+  // 构建 hasCustomKey 映射（仅布尔值，不含密钥本身）
+  const hasCustomKey = Object.fromEntries(
+    (Object.keys(PROVIDERS) as Provider[]).map((id) => [id, !!customKeys[id]])
+  ) as Record<Provider, boolean>;
+
+  const defaultKeyAvailable = !!process.env.DEEPSEEK_API_KEY;
 
   return (
     <div>
@@ -40,12 +52,12 @@ export default async function SettingsPage() {
             </div>
             <p className="text-xs text-ink3 mb-4">{t('set.ai.sub')}</p>
 
-            {/* Demo mode banner */}
-            {process.env.DEMO_MODE === 'true' && (
+            {/* 默认密钥可用 banner：DEEPSEEK_API_KEY 环境变量存在时显示 */}
+            {defaultKeyAvailable && (
               <div className="mb-4 p-3 rounded-md bg-good/5 border border-good/20 flex items-center gap-2">
-                <span className="text-good text-xs">✓</span>
+                <CheckCircle2 size={14} className="text-good flex-shrink-0" />
                 <span className="text-xs text-ink2">
-                  Demo mode: AI provider is pre-configured. No API key needed — just start exploring!
+                  {t('set.ai.defaultAvailable')} — DeepSeek · {t('set.ai.keyMode.defaultSub')}
                 </span>
               </div>
             )}
@@ -54,6 +66,7 @@ export default async function SettingsPage() {
               providers={providers}
               currentProvider={currentProvider}
               currentModel={currentModel}
+              hasCustomKey={hasCustomKey}
               labels={{
                 default: t('set.ai.default'),
                 defaultSub: t('set.ai.default.sub'),
@@ -75,6 +88,17 @@ export default async function SettingsPage() {
                 pickFirst: t('set.ai.pickFirst'),
                 save: t('set.ai.save'),
                 saved: t('set.ai.saved'),
+                keyMode: t('set.ai.keyMode'),
+                keyModeDefault: t('set.ai.keyMode.default'),
+                keyModeCustom: t('set.ai.keyMode.custom'),
+                keyModeDefaultSub: t('set.ai.keyMode.defaultSub'),
+                keyModeCustomSub: t('set.ai.keyMode.customSub'),
+                customKey: t('set.ai.customKey'),
+                customKeyPh: t('set.ai.customKey.ph'),
+                customKeyHint: t('set.ai.customKey.hint'),
+                noKey: t('set.ai.noKey'),
+                defaultAvailable: t('set.ai.defaultAvailable'),
+                keySaved: t('set.ai.keySaved'),
               }}
             />
           </CardSection>
