@@ -298,5 +298,5 @@ export const PATTERNS: Record<PatternId, PatternDef> = {
 export const PATTERN_LIST = Object.values(PATTERNS);
 
 export function getPattern(id: PatternId): PatternDef {
-  return PATTERNS[id];
+  return PATTERNS[id] ?? PATTERNS.pipeline;
 }

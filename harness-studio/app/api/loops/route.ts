@@ -63,13 +63,13 @@ export async function POST(req: NextRequest) {
 
   // If no graph provided, scaffold from pattern template
   let finalGraph: LoopGraph;
-  if (graph) {
+  if (graph && graph.nodes && graph.edges) {
     finalGraph = graph;
   } else {
     const tmpl = getPattern(pattern);
     finalGraph = {
-      nodes: tmpl.nodes.map((n) => ({ ...n })),
-      edges: tmpl.edges.map((e) => ({ ...e })),
+      nodes: (tmpl?.nodes ?? []).map((n) => ({ ...n })),
+      edges: (tmpl?.edges ?? []).map((e) => ({ ...e })),
     };
   }
 

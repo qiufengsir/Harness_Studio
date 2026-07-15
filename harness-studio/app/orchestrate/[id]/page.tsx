@@ -88,7 +88,7 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
           }
           // 无缓存：尝试从 URL 参数获取 pattern，用模板创建
           const url = new URL(window.location.href);
-          const pattern = (url.searchParams.get('pattern') as PatternId) || 'sequential';
+          const pattern = (url.searchParams.get('pattern') as PatternId) || 'pipeline';
           const tmpl = getPattern(pattern);
           const fallbackData = {
             id,
