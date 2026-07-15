@@ -67,7 +67,20 @@ export default function OrchestratePage() {
       }),
     });
     const result = await res.json();
-    router.push(`/orchestrate/${result.id}`);
+    // 缓存到 sessionStorage，防止 Cloudflare Worker 冷启动丢数据
+    const cacheData = {
+      ...result,
+      targets: ['agents', 'claude', 'cursor', 'copilot', 'trae'],
+      meta: data.meta ?? null,
+      updatedAt: Date.now(),
+    };
+    try {
+      sessionStorage.setItem(`loop_${result.id}`, JSON.stringify(cacheData));
+    } catch {
+      // sessionStorage 不可用时静默忽略
+    }
+    // URL 带 pattern 参数，作为 API 404 时的回退
+    router.push(`/orchestrate/${result.id}?pattern=${data.pattern}`);
   };
 
   return (
