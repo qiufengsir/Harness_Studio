@@ -3,7 +3,8 @@
   "version": "2.0.0",
   "private": true,
   "scripts": {
-    "build": "cd harness-studio && npm install && npm run build:worker",
-    "start": "cd harness-studio && npm start"
+    "build": "cd harness-studio && npm install && npx opennextjs-cloudflare build",
+    "deploy": "npx wrangler deploy",
+    "build:deploy": "npm run build && npm run deploy"
   }
 }
