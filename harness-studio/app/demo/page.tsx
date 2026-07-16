@@ -203,10 +203,10 @@ export default function DemoPage() {
       {showResult && response && (
         <>
           {/* Tab switch */}
-          <div className="flex gap-1 mb-4 border-b border-line">
+          <div className="scroll-x flex gap-1 mb-4 border-b border-line">
             <button
               onClick={() => setActiveTab('compare')}
-              className={`px-4 py-2 text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap min-h-[44px] ${
                 activeTab === 'compare' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
               }`}
             >
@@ -214,7 +214,7 @@ export default function DemoPage() {
             </button>
             <button
               onClick={() => setActiveTab('before')}
-              className={`px-4 py-2 text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap min-h-[44px] ${
                 activeTab === 'before' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
               }`}
             >
@@ -222,7 +222,7 @@ export default function DemoPage() {
             </button>
             <button
               onClick={() => setActiveTab('after')}
-              className={`px-4 py-2 text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap min-h-[44px] ${
                 activeTab === 'after' ? 'text-black border-b-2 border-black -mb-px' : 'text-ink3 hover:text-ink'
               }`}
             >

@@ -56,19 +56,19 @@ export function PatternPicker({ onClose, onPick }: Props) {
   const [tab, setTab] = useState<Tab>('ai'); // default to AI tab (the new feature)
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6" onClick={onClose}>
       <div
-        className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[88vh] overflow-y-auto"
+        className="bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-4xl w-full max-h-[92vh] overflow-y-auto safe-bottom"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-line sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-2 p-4 sm:p-6 border-b border-line sticky top-0 bg-white z-10">
+          <div className="flex items-center gap-3 min-w-0">
             {/* Tabs */}
             <div className="flex bg-bg2 rounded-lg p-1">
               <button
                 onClick={() => setTab('ai')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-2 sm:py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 min-h-[40px] ${
                   tab === 'ai' ? 'bg-black text-white' : 'text-ink3 hover:text-ink'
                 }`}
               >
@@ -77,7 +77,7 @@ export function PatternPicker({ onClose, onPick }: Props) {
               </button>
               <button
                 onClick={() => setTab('template')}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={`px-3 py-2 sm:py-1.5 text-xs font-medium rounded-md transition-all min-h-[40px] ${
                   tab === 'template' ? 'bg-black text-white' : 'text-ink3 hover:text-ink'
                 }`}
               >

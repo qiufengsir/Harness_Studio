@@ -79,9 +79,9 @@ export function OnboardingGuide() {
   const stepHref = STEPS[step].href;
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={close}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={close}>
       <div
-        className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden"
+        className="bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-lg w-full max-h-[92vh] overflow-y-auto safe-bottom"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -174,7 +174,7 @@ export function OnboardingButton() {
     <button
       onClick={handleClick}
       title={t('onboard.fab.tooltip')}
-      className="fixed bottom-6 right-6 z-40 w-10 h-10 rounded-full bg-black text-white shadow-lg hover:scale-110 hover:shadow-xl transition-all flex items-center justify-center group"
+      className="fixed safe-fab z-40 w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-black text-white shadow-lg hover:scale-110 hover:shadow-xl transition-all flex items-center justify-center group"
     >
       <Sparkles size={16} className="transition-transform group-hover:rotate-12" />
     </button>

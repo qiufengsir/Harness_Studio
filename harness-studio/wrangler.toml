@@ -1,0 +1,10 @@
+# OpenNext 要求：本文件必须在 Next 应用根目录（与 package.json 同级）
+# Cloudflare Workers Builds 会在 harness-studio/ 下执行 opennextjs-cloudflare build
+name = "harnessstudio"
+main = ".open-next/worker.js"
+compatibility_date = "2025-05-05"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"

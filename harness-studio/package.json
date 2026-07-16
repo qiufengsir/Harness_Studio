@@ -10,9 +10,11 @@
     "lint": "next lint",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "preview:worker": "npx opennextjs-cloudflare build && wrangler dev",
-    "build:worker": "npx opennextjs-cloudflare build",
-    "deploy:worker": "npx opennextjs-cloudflare build && wrangler deploy"
+    "preview:worker": "opennextjs-cloudflare build && wrangler dev",
+    "build:worker": "opennextjs-cloudflare build",
+    "deploy:worker": "opennextjs-cloudflare build && wrangler deploy",
+    "cf-build": "opennextjs-cloudflare build",
+    "cf-deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

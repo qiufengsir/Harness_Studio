@@ -839,27 +839,33 @@ Follow the team conventions defined by these agents.`;
 
       {/* Compile preview modal */}
       {showPreview && compiled && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => setShowPreview(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 md:p-6" onClick={() => setShowPreview(false)}>
           <div
-            className="bg-white rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            className="bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col safe-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-6 border-b border-line">
-              <div>
-                <h2 className="text-black">{t('loop.preview.title')}</h2>
-                <p className="text-xs text-ink3 mt-0.5">
-                  {compiled.length} {t('loop.preview.sub')}{allFiles.length}{t('loop.preview.sub2')}
-                </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-6 border-b border-line">
+              <div className="min-w-0 flex items-start justify-between gap-2">
+                <div>
+                  <h2 className="text-black">{t('loop.preview.title')}</h2>
+                  <p className="text-xs text-ink3 mt-0.5">
+                    {compiled.length} {t('loop.preview.sub')}{allFiles.length}{t('loop.preview.sub2')}
+                  </p>
+                </div>
+                <button onClick={() => setShowPreview(false)} className="sm:hidden text-ink3 hover:text-ink min-h-[44px] min-w-[44px] flex items-center justify-center -mr-2">
+                  <X size={18} />
+                </button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <Button
                   variant="ghost"
                   icon={Download}
                   onClick={() => downloadAll(allFiles)}
+                  className="flex-1 sm:flex-none justify-center"
                 >
                   {t('loop.preview.download')}
                 </Button>
-                <button onClick={() => setShowPreview(false)} className="text-ink3 hover:text-ink"><X size={18} /></button>
+                <button onClick={() => setShowPreview(false)} className="hidden sm:flex text-ink3 hover:text-ink items-center"><X size={18} /></button>
               </div>
             </div>
 
@@ -883,12 +889,12 @@ Follow the team conventions defined by these agents.`;
               </button>
             </div>
 
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
               {/* Files view */}
               {previewTab === 'files' && (
                 <>
                   {/* File tree + health panel */}
-                  <div className="w-72 border-r border-line overflow-y-auto p-3">
+                  <div className="w-full md:w-72 max-h-[40vh] md:max-h-none border-b md:border-b-0 md:border-r border-line overflow-y-auto p-3 shrink-0">
                     {/* Health check report */}
                     {health && (
                       <div className="mb-4 p-3 rounded-md border border-line bg-bg2">
@@ -996,9 +1002,9 @@ Follow the team conventions defined by these agents.`;
 
                   {/* Results */}
                   {chatResult && (
-                    <div className="flex-1 flex overflow-hidden">
+                    <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
                       {/* Without */}
-                      <div className="flex-1 border-r border-line overflow-auto">
+                      <div className="flex-1 border-b md:border-b-0 md:border-r border-line overflow-auto">
                         <div className="p-4 border-b border-line bg-bad/5">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded bg-bad/10 flex items-center justify-center">

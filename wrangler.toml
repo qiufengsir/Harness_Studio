@@ -1,6 +1,18 @@
-name = "harness-studio"
+# 已迁移：请使用子目录配置
+# OpenNext / Workers Builds 需要 wrangler 与 Next 应用同级：
+#   harness-studio/wrangler.toml
+#
+# 保留本文件仅作提示，避免在仓库根目录误跑 wrangler deploy。
+# 正确命令：
+#   cd harness-studio
+#   npm run cf-deploy
+#
+# 或在仓库根：
+#   npm run build:deploy
+
+name = "harnessstudio-DO-NOT-DEPLOY-FROM-ROOT"
 main = "harness-studio/.open-next/worker.js"
-compatibility_date = "2025-04-01"
+compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat"]
 
 [assets]

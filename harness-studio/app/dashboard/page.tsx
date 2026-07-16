@@ -258,8 +258,8 @@ function BatchPanel({ onScored }: { onScored: () => void }) {
 
           {/* 文件明细表格 */}
           <h3 className="text-sm font-semibold mb-2">{t('dash.batch.result.fileBreakdown')}</h3>
-          <div className="border border-line rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="border border-line rounded-lg overflow-hidden scroll-x">
+            <table className="w-full text-xs min-w-[640px]">
               <thead className="bg-bg2 text-ink3">
                 <tr>
                   <th className="text-left px-3 py-2 font-semibold">File</th>

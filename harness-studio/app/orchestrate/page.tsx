@@ -160,8 +160,8 @@ export default function OrchestratePage() {
 
       {/* 删除确认弹窗 */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-6" onClick={() => setDeleteTarget(null)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-t-xl sm:rounded-xl shadow-xl max-w-sm w-full overflow-hidden safe-bottom" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-line">
               <div className="flex items-center gap-2">
                 <Trash2 size={15} className="text-bad" />

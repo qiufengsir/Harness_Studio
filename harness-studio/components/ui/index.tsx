@@ -65,12 +65,12 @@ export function Chip({ tone = 'default', className, children }: { tone?: ChipTon
 // ---------- Empty State ----------
 export function EmptyState({ icon: Icon, title, desc, action }: { icon: LucideIcon; title: string; desc?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
+    <div className="flex flex-col items-center justify-center py-12 sm:py-20 px-2 text-center">
       <div className="w-12 h-12 rounded-full bg-bg2 flex items-center justify-center mb-4">
         <Icon size={20} className="text-ink3" />
       </div>
       <h2 className="mb-1">{title}</h2>
-      {desc && <p className="text-ink3 text-sm max-w-md mb-4">{desc}</p>}
+      {desc && <p className="text-ink3 text-sm max-w-md mb-4 leading-relaxed">{desc}</p>}
       {action}
     </div>
   );
@@ -79,12 +79,12 @@ export function EmptyState({ icon: Icon, title, desc, action }: { icon: LucideIc
 // ---------- Page Header ----------
 export function PageHeader({ title, desc, actions }: { title: string; desc?: string; actions?: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between mb-6">
-      <div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-6">
+      <div className="min-w-0">
         <h1 className="mb-1">{title}</h1>
-        {desc && <p className="text-ink3 text-sm">{desc}</p>}
+        {desc && <p className="text-ink3 text-sm leading-relaxed">{desc}</p>}
       </div>
-      {actions && <div className="row">{actions}</div>}
+      {actions && <div className="row shrink-0">{actions}</div>}
     </div>
   );
 }
@@ -105,13 +105,13 @@ export function Stat({ label, value, delta, tone = 'default' }: { label: string;
 // ---------- Tabs ----------
 export function Tabs({ tabs, active, onChange }: { tabs: { id: string; label: string }[]; active: string; onChange: (id: string) => void }) {
   return (
-    <div className="flex gap-1 border-b border-line">
+    <div className="scroll-x flex gap-1 border-b border-line -mx-1 px-1">
       {tabs.map((t) => (
         <button
           key={t.id}
           onClick={() => onChange(t.id)}
           className={cn(
-            'px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px',
+            'px-3 sm:px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap shrink-0 min-h-[44px]',
             active === t.id ? 'border-black text-black' : 'border-transparent text-ink3 hover:text-ink'
           )}
         >

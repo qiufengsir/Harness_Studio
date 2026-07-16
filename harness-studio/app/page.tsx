@@ -13,25 +13,31 @@ export default async function LandingPage() {
   return (
     <div>
       {/* Hero */}
-      <div className="mb-12">
+      <div className="mb-8 sm:mb-12">
         <div className="inline-flex items-center gap-1.5 chip chip-accent mb-4">
           <Sparkles size={11} />
           <span>{t('land.badge')}</span>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-black mb-3 max-w-2xl">
+        <h1 className="text-[1.75rem] sm:text-3xl md:text-4xl font-bold tracking-tight text-black mb-3 max-w-2xl leading-snug">
           {t('land.h1.l1')}<br />
           {t('land.h1.l2')}<span className="text-accent">{t('land.h1.l3')}</span>{t('land.h1.l4')}
         </h1>
-        <p className="text-ink2 text-base max-w-xl mb-6">{t('land.lead')}</p>
+        <p className="text-ink2 text-[0.9375rem] sm:text-base max-w-xl mb-6 leading-relaxed prose-read">
+          {t('land.lead')}
+        </p>
         <div className="row">
-          <Link href="/reverse">
-            <Button variant="primary" icon={ArrowRight}>{t('land.cta.primary')}</Button>
+          <Link href="/reverse" className="w-full sm:w-auto">
+            <Button variant="primary" icon={ArrowRight} className="w-full sm:w-auto justify-center">
+              {t('land.cta.primary')}
+            </Button>
           </Link>
-          <Link href="/demo">
-            <Button variant="ghost" icon={Sparkles}>{t('land.cta.secondary')}</Button>
+          <Link href="/demo" className="w-full sm:w-auto">
+            <Button variant="ghost" icon={Sparkles} className="w-full sm:w-auto justify-center">
+              {t('land.cta.secondary')}
+            </Button>
           </Link>
         </div>
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
           <span className="text-xs text-ink3">{t('land.demo')}</span>
           <span className="text-xs text-ink3">{t('land.demoSub')}</span>
         </div>
