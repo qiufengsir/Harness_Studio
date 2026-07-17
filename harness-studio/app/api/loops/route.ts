@@ -29,8 +29,23 @@ export async function GET() {
 
 // POST — create or compile
 export async function POST(req: NextRequest) {
-  const db = getDB();
-  const body = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  let db: ReturnType<typeof getDB>;
+  try {
+    db = getDB();
+  } catch (e) {
+    return NextResponse.json(
+      { error: `Database unavailable: ${(e as Error).message}` },
+      { status: 503 },
+    );
+  }
+
   const action = body.action ?? 'create';
 
   if (action === 'compile') {
@@ -85,17 +100,35 @@ export async function POST(req: NextRequest) {
 
   const id = uuid();
   const now = Date.now();
-  db.insert(loops).values({
-    id,
-    name: name || 'Untitled Loop',
-    description: description ?? null,
-    pattern,
-    graph: JSON.stringify(finalGraph),
-    targets: JSON.stringify(targets ?? ['agents', 'claude', 'cursor', 'copilot', 'trae']),
-    meta: meta ? JSON.stringify(meta) : null,
-    createdAt: now,
-    updatedAt: now,
-  }).run();
+  const loopName = name || 'Untitled Loop';
+  const loopTargets = targets ?? ['agents', 'claude', 'cursor', 'copilot', 'trae'];
+  let persisted = true;
 
-  return NextResponse.json({ id, name, pattern, graph: finalGraph });
+  try {
+    db.insert(loops).values({
+      id,
+      name: loopName,
+      description: description ?? null,
+      pattern,
+      graph: JSON.stringify(finalGraph),
+      targets: JSON.stringify(loopTargets),
+      meta: meta ? JSON.stringify(meta) : null,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+  } catch (e) {
+    // Cloudflare / in-memory DB 偶发失败时仍返回可打开画布的 payload，由前端 sessionStorage 兜底
+    persisted = false;
+    console.warn('[loops] persist failed, returning ephemeral loop:', (e as Error).message);
+  }
+
+  return NextResponse.json({
+    id,
+    name: loopName,
+    pattern,
+    graph: finalGraph,
+    targets: loopTargets,
+    meta: meta ?? null,
+    ephemeral: !persisted,
+  });
 }

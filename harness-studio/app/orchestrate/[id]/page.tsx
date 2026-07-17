@@ -16,7 +16,8 @@ import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, B
 import { Card, CardSection, Button, Chip, PageHeader } from '@/components/ui';
 import { LoopGraph, LoopNodeData, CompileTarget } from '@/lib/orchestrator/compiler';
 import { ALL_PLATFORMS, PLATFORM_INFO } from '@/lib/orchestrator/compiler';
-import { getPattern, type PatternId } from '@/lib/orchestrator/patterns';
+import { type PatternId } from '@/lib/orchestrator/patterns';
+import { cacheLoop, getCachedLoop, scaffoldLoopGraph } from '@/lib/orchestrator/loop-cache';
 import { useI18n } from '@/components/i18n/I18nProvider';
 
 interface LoopData {
@@ -71,55 +72,10 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
 
-  // Load — 尝试从 API 加载，失败时回退到 sessionStorage 或模式模板
+  // Load — API → sessionStorage → URL pattern 模板（适配 Cloudflare 内存库）
   useEffect(() => {
-    const loadLoop = async () => {
-      try {
-        const r = await fetch(`/api/loops/${id}`);
-        const d = await r.json();
-
-        // API 返回 404 或错误：回退到 sessionStorage
-        if (!r.ok || d.error) {
-          const cached = sessionStorage.getItem(`loop_${id}`);
-          if (cached) {
-            const cachedData = JSON.parse(cached);
-            applyLoopData(cachedData);
-            return;
-          }
-          // 无缓存：尝试从 URL 参数获取 pattern，用模板创建
-          const url = new URL(window.location.href);
-          const pattern = (url.searchParams.get('pattern') as PatternId) || 'pipeline';
-          const tmpl = getPattern(pattern);
-          const fallbackData = {
-            id,
-            name: 'Untitled Loop',
-            description: null,
-            pattern,
-            graph: {
-              nodes: tmpl.nodes.map((n) => ({ ...n })),
-              edges: tmpl.edges.map((e) => ({ ...e })),
-            },
-            targets: ALL_PLATFORMS,
-            meta: null,
-            updatedAt: Date.now(),
-          };
-          applyLoopData(fallbackData);
-          // 缓存到 sessionStorage 以备后续使用
-          sessionStorage.setItem(`loop_${id}`, JSON.stringify(fallbackData));
-          return;
-        }
-
-        applyLoopData(d);
-        // 缓存到 sessionStorage
-        sessionStorage.setItem(`loop_${id}`, JSON.stringify(d));
-      } catch (e) {
-        setLoadError((e as Error).message || 'Failed to load loop');
-        setLoading(false);
-      }
-    };
-
     const applyLoopData = (d: any) => {
-      if (!d || !d.graph) {
+      if (!d?.graph?.nodes) {
         setLoadError('Invalid loop data');
         setLoading(false);
         return;
@@ -145,6 +101,64 @@ export default function LoopCanvasPage({ params }: { params: Promise<{ id: strin
         })),
       );
       setLoading(false);
+    };
+
+    const loadFromFallback = () => {
+      const cached = getCachedLoop(id);
+      if (cached) {
+        applyLoopData(cached);
+        return true;
+      }
+      const url = new URL(window.location.href);
+      const pattern = (url.searchParams.get('pattern') as PatternId) || 'pipeline';
+      const fallbackData = {
+        id,
+        name: 'Untitled Loop',
+        description: null,
+        pattern,
+        graph: scaffoldLoopGraph(pattern),
+        targets: ALL_PLATFORMS,
+        meta: null,
+        updatedAt: Date.now(),
+      };
+      cacheLoop(fallbackData);
+      applyLoopData(fallbackData);
+      return true;
+    };
+
+    const loadLoop = async () => {
+      if (!id || id === 'undefined' || id === 'null') {
+        loadFromFallback();
+        return;
+      }
+
+      try {
+        const r = await fetch(`/api/loops/${id}`);
+        const d = await r.json().catch(() => null);
+
+        if (!r.ok || !d || d.error || !d.graph?.nodes) {
+          loadFromFallback();
+          return;
+        }
+
+        applyLoopData(d);
+        cacheLoop({
+          id: d.id ?? id,
+          name: d.name,
+          description: d.description ?? null,
+          pattern: d.pattern,
+          graph: d.graph,
+          targets: d.targets ?? ALL_PLATFORMS,
+          meta: d.meta ?? null,
+          updatedAt: d.updatedAt ?? Date.now(),
+        });
+      } catch {
+        // 网络失败时优先用本地缓存，避免画布白屏
+        if (!loadFromFallback()) {
+          setLoadError('Failed to load loop');
+          setLoading(false);
+        }
+      }
     };
 
     loadLoop();

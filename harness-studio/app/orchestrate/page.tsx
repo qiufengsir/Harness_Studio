@@ -9,6 +9,12 @@ import { Workflow, Plus, ArrowRight, Loader2, Trash2, X } from 'lucide-react';
 import { Card, CardSection, Button, PageHeader, Chip, EmptyState } from '@/components/ui';
 import { PatternPicker, type CreateLoopData } from '@/components/orchestrate/PatternPicker';
 import { useI18n } from '@/components/i18n/I18nProvider';
+import { uuid } from '@/lib/utils/uuid';
+import {
+  cacheLoop,
+  DEFAULT_LOOP_TARGETS,
+  scaffoldLoopGraph,
+} from '@/lib/orchestrator/loop-cache';
 
 interface LoopRow {
   id: string;
@@ -53,34 +59,53 @@ export default function OrchestratePage() {
   };
 
   const createLoop = async (data: CreateLoopData) => {
-    const res = await fetch('/api/loops', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: data.name,
-        pattern: data.pattern,
-        graph: data.graph,
-        agentPrompts: data.agentPrompts,
-        description: data.description,
-        meta: data.meta,
-        action: 'create',
-      }),
-    });
-    const result = await res.json();
-    // 缓存到 sessionStorage，防止 Cloudflare Worker 冷启动丢数据
-    const cacheData = {
-      ...result,
-      targets: ['agents', 'claude', 'cursor', 'copilot', 'trae'],
+    // 先在客户端搭好完整 graph，保证 API 失败时仍能打开画布
+    const graph = scaffoldLoopGraph(data.pattern, data.graph ?? null, data.agentPrompts ?? null);
+    let id: string | null = null;
+    let serverGraph = graph;
+
+    try {
+      const res = await fetch('/api/loops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: data.name,
+          pattern: data.pattern,
+          graph: data.graph ?? graph,
+          agentPrompts: data.agentPrompts,
+          description: data.description,
+          meta: data.meta,
+          action: 'create',
+        }),
+      });
+      const result = await res.json().catch(() => null);
+      if (res.ok && result?.id && typeof result.id === 'string') {
+        id = result.id;
+        if (result.graph?.nodes?.length) {
+          serverGraph = result.graph;
+        }
+      } else if (result?.error) {
+        console.warn('[createLoop] API error, using client fallback:', result.error);
+      }
+    } catch (e) {
+      // Cloudflare / 网络失败：继续用本地 id + sessionStorage 打开画布
+      console.warn('[createLoop] request failed, using client fallback:', e);
+    }
+
+    if (!id) id = uuid();
+
+    cacheLoop({
+      id,
+      name: data.name || 'Untitled Loop',
+      description: data.description ?? null,
+      pattern: data.pattern,
+      graph: serverGraph,
+      targets: DEFAULT_LOOP_TARGETS,
       meta: data.meta ?? null,
       updatedAt: Date.now(),
-    };
-    try {
-      sessionStorage.setItem(`loop_${result.id}`, JSON.stringify(cacheData));
-    } catch {
-      // sessionStorage 不可用时静默忽略
-    }
-    // URL 带 pattern 参数，作为 API 404 时的回退
-    router.push(`/orchestrate/${result.id}?pattern=${data.pattern}`);
+    });
+
+    router.push(`/orchestrate/${id}?pattern=${encodeURIComponent(data.pattern)}`);
   };
 
   return (

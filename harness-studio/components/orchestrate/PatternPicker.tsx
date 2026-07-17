@@ -109,12 +109,16 @@ function TemplatePanel({ t, onClose, onPick }: { t: (k: string) => string; onClo
   const [selected, setSelected] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const pick = async () => {
     if (!selected) return;
     setCreating(true);
+    setError(null);
     try {
       await onPick({ pattern: selected, name: name || `${selected}-loop` });
+    } catch (e) {
+      setError((e as Error).message || t('pp.create.err'));
     } finally {
       setCreating(false);
     }
@@ -164,6 +168,11 @@ function TemplatePanel({ t, onClose, onPick }: { t: (k: string) => string; onClo
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
+          {error && (
+            <div className="text-xs text-bad flex items-center gap-2 mb-3">
+              <AlertCircle size={12} /> {error}
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>{t('pp.cancel')}</Button>
             <Button variant="primary" icon={creating ? Loader2 : ArrowRight} onClick={pick} disabled={creating}>
@@ -302,6 +311,7 @@ function AIPanel({ t, onClose, onPick }: { t: (k: string) => string; onClose: ()
   const create = async () => {
     if (!result) return;
     setCreating(true);
+    setError(null);
     try {
       await onPick({
         pattern: result.pattern,
@@ -314,6 +324,8 @@ function AIPanel({ t, onClose, onPick }: { t: (k: string) => string; onClose: ()
           uploadedFiles: files.map((f) => f.path),
         },
       });
+    } catch (e) {
+      setError((e as Error).message || t('pp.create.err'));
     } finally {
       setCreating(false);
     }
