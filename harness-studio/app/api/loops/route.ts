@@ -15,8 +15,14 @@ export const dynamic = 'force-dynamic';
 
 // GET — list all loops
 export async function GET() {
-  const db = getDB();
-  const rows = db.select().from(loops).all().sort((a: Loop, b: Loop) => b.updatedAt - a.updatedAt);
+  // 内存模式下 Worker 冷启动后 rows 为空，返回空列表让前端正常渲染
+  let rows: Loop[] = [];
+  try {
+    const db = getDB();
+    rows = db.select().from(loops).all().sort((a: Loop, b: Loop) => b.updatedAt - a.updatedAt);
+  } catch (e) {
+    console.warn('[loops] GET list failed, returning empty:', (e as Error).message);
+  }
   return NextResponse.json({
     loops: rows.map((r: Loop) => ({
       ...r,

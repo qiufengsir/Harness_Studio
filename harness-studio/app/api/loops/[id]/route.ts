@@ -17,8 +17,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const db = getDB();
-  const row = db.select().from(loops).where(eq(loops.id, id)).get();
+  // 内存模式下 Worker 冷启动后数据丢失，返回 404 让前端走 sessionStorage 兜底
+  let row: any;
+  try {
+    const db = getDB();
+    row = db.select().from(loops).where(eq(loops.id, id)).get();
+  } catch (e) {
+    console.warn('[loops] GET by id failed, returning 404:', (e as Error).message);
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json({
     ...row,

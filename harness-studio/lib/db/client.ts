@@ -1,36 +1,61 @@
 // ============================================================
 // DB Client — dual mode: better-sqlite3 (local/Railway) or
-// in-memory (Cloudflare Pages where native modules are unavailable)
+// in-memory (Cloudflare Workers where native modules are unavailable)
+//
+// 关键：使用 ESM 静态 import 引入 memory-client 与 schema，
+// 避免 Cloudflare Workers 运行时里 `require()` 不可用导致的 500。
+// better-sqlite3 仍用 require 动态加载（仅 Node 分支会走到）。
 // ============================================================
+import { getMemoryDB } from './memory-client';
+import * as schema from './schema';
 
 let _db: any = null;
-let _memoryMode = false;
+let _memoryMode: boolean | null = null;
 
-// Detect if better-sqlite3 is available
-try {
-  require('better-sqlite3');
-} catch {
-  _memoryMode = true;
-  console.info('[db] better-sqlite3 not available, using in-memory database');
+/**
+ * 检测当前是否需要走内存数据库模式。
+ * - Cloudflare Workers：require 不可用或 better-sqlite3 无法加载 → 内存模式
+ * - Node.js (本地/Railway)：better-sqlite3 可正常加载 → 真实数据库模式
+ *
+ * 注意：`require` 在 CJS 里是模块级局部变量（不在 globalThis 上），
+ * 在 ESM/Workers 运行时则未定义。`typeof` 对未声明标识符安全（不抛 ReferenceError）。
+ */
+function detectMemoryMode(): boolean {
+  if (_memoryMode !== null) return _memoryMode;
+  try {
+    // `typeof require` 在 ESM/Workers 下返回 'undefined'，在 CJS 下返回 'function'
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    if (typeof require !== 'function') {
+      _memoryMode = true;
+      return true;
+    }
+    // 尝试解析 better-sqlite3（不实际实例化，避免副作用）
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require.resolve('better-sqlite3');
+    _memoryMode = false;
+    return false;
+  } catch {
+    _memoryMode = true;
+    console.info('[db] better-sqlite3 not available, using in-memory database');
+    return true;
+  }
 }
 
 export function getDB() {
   if (_db) return _db;
 
-  if (_memoryMode) {
-    // Use in-memory database for Cloudflare Pages
-    const { getMemoryDB } = require('./memory-client');
+  if (detectMemoryMode()) {
     _db = getMemoryDB();
     return _db;
   }
 
   // Use better-sqlite3 + Drizzle ORM for local dev / Railway
+  // 此分支仅在 Node.js 环境下走到，require 安全可用
   const Database = require('better-sqlite3');
   const { drizzle } = require('drizzle-orm/better-sqlite3');
   const { migrate } = require('drizzle-orm/better-sqlite3/migrator');
   const path = require('node:path');
   const fs = require('node:fs');
-  const schema = require('./schema');
 
   const DB_PATH = process.env.DATABASE_PATH
     ? path.resolve(process.env.DATABASE_PATH)
