@@ -59,53 +59,41 @@ export default function OrchestratePage() {
   };
 
   const createLoop = async (data: CreateLoopData) => {
-    // 先在客户端搭好完整 graph，保证 API 失败时仍能打开画布
+    // 先本地生成完整数据并立即跳转，不阻塞在 API
+    // （线上 /api/loops 挂起时，await fetch 会导致永远打不开画布）
     const graph = scaffoldLoopGraph(data.pattern, data.graph ?? null, data.agentPrompts ?? null);
-    let id: string | null = null;
-    let serverGraph = graph;
-
-    try {
-      const res = await fetch('/api/loops', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: data.name,
-          pattern: data.pattern,
-          graph: data.graph ?? graph,
-          agentPrompts: data.agentPrompts,
-          description: data.description,
-          meta: data.meta,
-          action: 'create',
-        }),
-      });
-      const result = await res.json().catch(() => null);
-      if (res.ok && result?.id && typeof result.id === 'string') {
-        id = result.id;
-        if (result.graph?.nodes?.length) {
-          serverGraph = result.graph;
-        }
-      } else if (result?.error) {
-        console.warn('[createLoop] API error, using client fallback:', result.error);
-      }
-    } catch (e) {
-      // Cloudflare / 网络失败：继续用本地 id + sessionStorage 打开画布
-      console.warn('[createLoop] request failed, using client fallback:', e);
-    }
-
-    if (!id) id = uuid();
+    const id = uuid();
 
     cacheLoop({
       id,
       name: data.name || 'Untitled Loop',
       description: data.description ?? null,
       pattern: data.pattern,
-      graph: serverGraph,
+      graph,
       targets: DEFAULT_LOOP_TARGETS,
       meta: data.meta ?? null,
       updatedAt: Date.now(),
     });
 
-    router.push(`/orchestrate/${id}?pattern=${encodeURIComponent(data.pattern)}`);
+    // 后台尝试持久化（keepalive 保证跳转后请求仍可完成）
+    fetch('/api/loops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id,
+        name: data.name,
+        pattern: data.pattern,
+        graph: data.graph ?? graph,
+        agentPrompts: data.agentPrompts,
+        description: data.description,
+        meta: data.meta,
+        action: 'create',
+      }),
+      keepalive: true,
+    }).catch(() => {});
+
+    // 硬跳转：OpenNext/Cloudflare 上 soft navigate 到动态路由常失败
+    window.location.assign(`/orchestrate/${id}?pattern=${encodeURIComponent(data.pattern)}`);
   };
 
   return (

@@ -66,7 +66,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Default: create new loop
-  const { name, description, pattern, graph, targets, agentPrompts, meta } = body as {
+  const { id: clientId, name, description, pattern, graph, targets, agentPrompts, meta } = body as {
+    id?: string;
     name: string;
     description?: string;
     pattern: PatternId;
@@ -98,7 +99,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const id = uuid();
+  const id =
+    typeof clientId === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(clientId) ? clientId : uuid();
   const now = Date.now();
   const loopName = name || 'Untitled Loop';
   const loopTargets = targets ?? ['agents', 'claude', 'cursor', 'copilot', 'trae'];

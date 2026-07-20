@@ -5,13 +5,11 @@
 // ============================================================
 import { useEffect, useState, useCallback, useRef, use } from 'react';
 import { useRouter } from 'next/navigation';
-import ReactFlow, {
-  Background, Controls, MiniMap,
-  addEdge, applyEdgeChanges, applyNodeChanges,
+import nextDynamic from 'next/dynamic';
+import {
   Node, Edge, Connection, NodeChange, EdgeChange,
-  Handle, Position,
+  addEdge, applyEdgeChanges, applyNodeChanges,
 } from 'reactflow';
-import 'reactflow/dist/style.css';
 import { Save, Play, Download, Trash2, Plus, X, Check, AlertTriangle, Loader2, Bot, RefreshCw, Sparkles, FileCode, Clock, ArrowRight } from 'lucide-react';
 import { Card, CardSection, Button, Chip, PageHeader } from '@/components/ui';
 import { LoopGraph, LoopNodeData, CompileTarget } from '@/lib/orchestrator/compiler';
@@ -19,6 +17,16 @@ import { ALL_PLATFORMS, PLATFORM_INFO } from '@/lib/orchestrator/compiler';
 import { type PatternId } from '@/lib/orchestrator/patterns';
 import { cacheLoop, getCachedLoop, scaffoldLoopGraph } from '@/lib/orchestrator/loop-cache';
 import { useI18n } from '@/components/i18n/I18nProvider';
+
+// React Flow must not SSR — OpenNext/Cloudflare will crash the page otherwise
+const FlowCanvas = nextDynamic(() => import('@/components/orchestrate/FlowCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: '600px' }} className="flex items-center justify-center bg-bg2">
+      <Loader2 className="animate-spin text-ink3" size={20} />
+    </div>
+  ),
+});
 
 interface LoopData {
   id: string;
@@ -512,30 +520,14 @@ Follow the team conventions defined by these agents.`;
         {/* Canvas */}
         <div className="lg:col-span-3">
           <Card className="overflow-hidden">
-            <div style={{ height: '600px' }}>
-              <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={(_, n) => setSelectedNode(n.id)}
-                nodeTypes={{ agent: AgentNode }}
-                fitView
-                defaultEdgeOptions={{ style: { stroke: '#a1a1aa', strokeWidth: 1.5 } }}
-              >
-                <Background color="#e4e4e7" gap={16} />
-                <Controls />
-                <MiniMap
-                  nodeColor={(n) => {
-                    const role = n.data?.role;
-                    if (role === 'leader' || role === 'router' || role === 'merge') return '#09090b';
-                    return '#a1a1aa';
-                  }}
-                  maskColor="rgba(255,255,255,0.6)"
-                />
-              </ReactFlow>
-            </div>
+            <FlowCanvas
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={(id) => setSelectedNode(id)}
+            />
           </Card>
 
           {/* Platform targets */}
@@ -1094,30 +1086,6 @@ Follow the team conventions defined by these agents.`;
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ---------- Custom node renderer ----------
-function AgentNode({ data, selected }: { data: LoopNodeData; selected?: boolean }) {
-  const isHub = data.role === 'leader' || data.role === 'router' || data.role === 'merge';
-  return (
-    <div
-      className={`px-4 py-3 rounded-lg border-2 bg-white shadow-md transition-all min-w-[160px] ${
-        selected ? 'border-black' : isHub ? 'border-black' : 'border-line2'
-      }`}
-      style={isHub ? { background: '#09090b', color: 'white' } : undefined}
-    >
-      <Handle type="target" position={Position.Left} />
-      <div className="flex items-center gap-2 mb-1">
-        <Bot size={12} className={isHub ? 'text-white' : 'text-ink3'} />
-        <span className={`text-[10px] font-mono uppercase tracking-wider ${isHub ? 'text-white/60' : 'text-ink3'}`}>
-          {data.role}
-        </span>
-      </div>
-      <div className={`text-sm font-medium ${isHub ? 'text-white' : 'text-black'}`}>{data.label}</div>
-      <div className={`text-[10px] mt-0.5 ${isHub ? 'text-white/60' : 'text-ink3'} truncate`}>{data.agent}</div>
-      <Handle type="source" position={Position.Right} />
     </div>
   );
 }
