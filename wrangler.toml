@@ -1,19 +1,24 @@
-# 已迁移：请使用子目录配置
-# OpenNext / Workers Builds 需要 wrangler 与 Next 应用同级：
-#   harness-studio/wrangler.toml
+# Cloudflare Workers Builds 默认从仓库根目录读此文件。
+# name 必须小写 + 数字 + 连字符；构建产物在 harness-studio/.open-next/
 #
-# 保留本文件仅作提示，避免在仓库根目录误跑 wrangler deploy。
-# 正确命令：
-#   cd harness-studio
-#   npm run cf-deploy
+# 推荐构建命令（仓库根）：
+#   npm run build
+# 推荐部署命令（仓库根）：
+#   npm run deploy
+# 或：
+#   npx wrangler deploy
 #
-# 或在仓库根：
-#   npm run build:deploy
+# 也可在 Cloudflare 控制台把 Root directory 设为 harness-studio，
+# 那时会改用 harness-studio/wrangler.toml。
 
-name = "harnessstudio-DO-NOT-DEPLOY-FROM-ROOT"
+name = "harnessstudio"
 main = "harness-studio/.open-next/worker.js"
 compatibility_date = "2025-05-05"
-compatibility_flags = ["nodejs_compat"]
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+[vars]
+USE_MEMORY_DB = "1"
 
 [assets]
 directory = "harness-studio/.open-next/assets"
+binding = "ASSETS"
