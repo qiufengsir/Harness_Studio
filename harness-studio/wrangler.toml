@@ -5,6 +5,10 @@ main = ".open-next/worker.js"
 compatibility_date = "2025-05-05"
 compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 
+[vars]
+# Workers 无法使用 better-sqlite3 原生模块，强制内存库
+USE_MEMORY_DB = "1"
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"

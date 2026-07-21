@@ -1,5 +1,5 @@
 // ============================================================
-// Loops API — CRUD + compile-to-platforms
+// Loops API 鈥?CRUD + compile-to-platforms
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
@@ -13,27 +13,30 @@ import { healthCheck } from '@/lib/orchestrator/healthcheck';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET — list all loops
+// GET 鈥?list all loops
 export async function GET() {
-  // 内存模式下 Worker 冷启动后 rows 为空，返回空列表让前端正常渲染
-  let rows: Loop[] = [];
   try {
     const db = getDB();
-    rows = db.select().from(loops).all().sort((a: Loop, b: Loop) => b.updatedAt - a.updatedAt);
+    const rows = db.select().from(loops).all().sort((a: Loop, b: Loop) => b.updatedAt - a.updatedAt);
+    return NextResponse.json({
+      loops: rows.map((r: Loop) => ({
+        ...r,
+        graph: JSON.parse(r.graph),
+        targets: JSON.parse(r.targets),
+      })),
+      patterns: PATTERN_LIST.map((p) => ({ id: p.id, name: p.name, tagline: p.tagline })),
+    });
   } catch (e) {
-    console.warn('[loops] GET list failed, returning empty:', (e as Error).message);
+    console.warn('[loops] GET failed:', (e as Error).message);
+    return NextResponse.json({
+      loops: [],
+      patterns: PATTERN_LIST.map((p) => ({ id: p.id, name: p.name, tagline: p.tagline })),
+      warning: (e as Error).message,
+    });
   }
-  return NextResponse.json({
-    loops: rows.map((r: Loop) => ({
-      ...r,
-      graph: JSON.parse(r.graph),
-      targets: JSON.parse(r.targets),
-    })),
-    patterns: PATTERN_LIST.map((p) => ({ id: p.id, name: p.name, tagline: p.tagline })),
-  });
 }
 
-// POST — create or compile
+// POST 鈥?create or compile
 export async function POST(req: NextRequest) {
   let body: any;
   try {
@@ -125,7 +128,7 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     }).run();
   } catch (e) {
-    // Cloudflare / in-memory DB 偶发失败时仍返回可打开画布的 payload，由前端 sessionStorage 兜底
+    // Cloudflare / in-memory DB 鍋跺彂澶辫触鏃朵粛杩斿洖鍙墦寮€鐢诲竷鐨?payload锛岀敱鍓嶇 sessionStorage 鍏滃簳
     persisted = false;
     console.warn('[loops] persist failed, returning ephemeral loop:', (e as Error).message);
   }

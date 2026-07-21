@@ -111,15 +111,20 @@ function TemplatePanel({ t, onClose, onPick }: { t: (k: string) => string; onClo
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pick = async () => {
+  const pick = () => {
     if (!selected) return;
     setCreating(true);
     setError(null);
     try {
-      await onPick({ pattern: selected, name: name || `${selected}-loop` });
+      // 不 await：createLoop 会立刻硬跳转；await 会在线上旧逻辑里卡在 500 API
+      void Promise.resolve(
+        onPick({ pattern: selected, name: name || `${selected}-loop` }),
+      ).catch((e) => {
+        setError((e as Error).message || t('pp.create.err'));
+        setCreating(false);
+      });
     } catch (e) {
       setError((e as Error).message || t('pp.create.err'));
-    } finally {
       setCreating(false);
     }
   };
@@ -308,25 +313,29 @@ function AIPanel({ t, onClose, onPick }: { t: (k: string) => string; onClose: ()
     }
   };
 
-  const create = async () => {
+  const create = () => {
     if (!result) return;
     setCreating(true);
     setError(null);
     try {
-      await onPick({
-        pattern: result.pattern,
-        name: loopName,
-        graph: result.graph,
-        agentPrompts: result.generatedPrompts,
-        description: desc || undefined,
-        meta: {
-          freeText: desc || '',
-          uploadedFiles: files.map((f) => f.path),
-        },
+      void Promise.resolve(
+        onPick({
+          pattern: result.pattern,
+          name: loopName,
+          graph: result.graph,
+          agentPrompts: result.generatedPrompts,
+          description: desc || undefined,
+          meta: {
+            freeText: desc || '',
+            uploadedFiles: files.map((f) => f.path),
+          },
+        }),
+      ).catch((e) => {
+        setError((e as Error).message || t('pp.create.err'));
+        setCreating(false);
       });
     } catch (e) {
       setError((e as Error).message || t('pp.create.err'));
-    } finally {
       setCreating(false);
     }
   };
