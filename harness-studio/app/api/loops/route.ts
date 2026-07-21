@@ -1,5 +1,5 @@
 // ============================================================
-// Loops API 鈥?CRUD + compile-to-platforms
+// Loops API — CRUD + compile-to-platforms
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
 import { getDB } from '@/lib/db/client';
@@ -13,7 +13,7 @@ import { healthCheck } from '@/lib/orchestrator/healthcheck';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET 鈥?list all loops
+// GET — list all loops
 export async function GET() {
   try {
     const db = getDB();
@@ -36,7 +36,7 @@ export async function GET() {
   }
 }
 
-// POST 鈥?create or compile
+// POST — create or compile
 export async function POST(req: NextRequest) {
   let body: any;
   try {
